@@ -100,7 +100,6 @@ bool DataReader::load(const std::string& filename, Song &song)
     }
 
     ok = decompress(source);
-
     if(ok)
     {
         ok = read(song);
@@ -108,6 +107,11 @@ bool DataReader::load(const std::string& filename, Song &song)
 
     fclose(source);
     return ok;
+}
+/// Get song raw size.
+size_t DataReader::size()
+{
+    return _buffer.size();
 }
 /// Read a single unsigned byte from buffer.
 /// @param [out] v Unsigned byte read from buffer.
@@ -180,11 +184,19 @@ bool DataReader::read(Instrument& inst)
 {
     bool ok = read(inst.name);
     if(ok) { ok = read(inst.mode); }
-    if(ok) { ok = read(inst.std.volume); }
-    if(ok) { ok = read(inst.std.arpeggio); }
-    if(ok) { ok = read(inst.std.arpeggioMode); }
-    if(ok) { ok = read(inst.std.noise); }
-    if(ok) { ok = read(inst.std.wave); }
+    if(0 == inst.mode)
+    {
+        if(ok) { ok = read(inst.std.volume); }
+        if(ok) { ok = read(inst.std.arpeggio); }
+        if(ok) { ok = read(inst.std.arpeggioMode); }
+        if(ok) { ok = read(inst.std.noise); }
+        if(ok) { ok = read(inst.std.wave); }
+    }
+    else
+    {
+        fprintf(stderr, "FM instruments are not yet supported!\n");
+        ok = false;
+    }
     return ok;
 }
 
@@ -194,6 +206,7 @@ bool DataReader::read(WaveTable& tbl)
     uint32_t size;
 
     ok = read(size);
+
     if(0 == size) { return true; }
     if(false == ok) { return false; }
 
@@ -315,7 +328,6 @@ bool DataReader::read(Song &song)
     uint8_t count;
     ok = read(count);
     if(!ok) { return false; }
-    
     song.instrument.resize(count);
     for(uint8_t i=0; i<count; i++)
     {
@@ -337,11 +349,12 @@ bool DataReader::read(Song &song)
             if(!ok) { return false; }
         }
     }
-    
+
     // Load patterns
     song.effectCount.resize(song.infos.systemChanCount);
     song.patternData.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
-    for(size_t i=0, l=0; ok && (i<song.infos.systemChanCount); i++)
+    size_t i, l;
+    for(i=0, l=0; ok && (i<song.infos.systemChanCount); i++)
     {
         ok = read(song.effectCount[i]);
         for(size_t j=0; ok && (j<song.infos.totalRowsInPatternMatrix); j++)
@@ -365,7 +378,7 @@ bool DataReader::read(Song &song)
     if(size)
     {
         song.sample.resize(size);
-        for(size_t i=0; ok && (i<size); i++)
+        for(i=0; ok && (i<size); i++)
         {
             ok = read(song.sample[i]);
         }

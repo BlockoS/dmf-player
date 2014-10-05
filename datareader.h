@@ -17,7 +17,8 @@ class DataReader
         /// @param [out] song Decoded song.
         /// @return true if song is successfully loaded.
         bool load(const std::string& filename, Song &song);
-    
+        /// Get song raw size.
+        size_t size();
     private:
         /// Read a single unsigned byte from buffer.
         /// @param [out] v Unsigned byte read from buffer.

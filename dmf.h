@@ -155,6 +155,8 @@ struct PatternData
     uint16_t instrument;
 };
 
+bool isEmpty(PatternData const& src);
+
 struct Sample
 {
     uint8_t  rate;
