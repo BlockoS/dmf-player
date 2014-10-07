@@ -35,6 +35,29 @@ namespace PCE
         RestEx             = 0x79, // For values >= 128
         Rest               = 0x80  // For values between 0 and 127
     };
+    
+    class SongPacker
+    {
+        public:
+            struct PatternMatrix
+            {
+                std::vector<int> dataOffset;
+                std::vector<int> packedOffset;
+            };
+
+        public:
+            SongPacker();
+            ~SongPacker();
+
+            
+        private:
+            void packPatternMatrix(DMF::Song const& song);
+            void packPatternData(DMF::Song const& song);
+            
+        private:
+            std::vector<uint8_t>      _buffer;
+            std::vector<PatternMatrix> _matrix;
+    };
 }
 
 #endif

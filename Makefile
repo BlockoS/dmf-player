@@ -20,7 +20,7 @@ OBJDIR := $(OUTDIR)/obj
 
 LIBS   := -lz 
 
-EXE_SRC := dmf.cpp datareader.cpp main.cpp
+EXE_SRC := dmf.cpp datareader.cpp pce.cpp main.cpp
 OBJS    := $(EXE_SRC:.cpp=.o)
 EXE_OBJ := $(addprefix $(OBJDIR)/, $(OBJS))
 EXE     := $(OUTDIR)/dmfread
