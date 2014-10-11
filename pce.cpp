@@ -1,7 +1,26 @@
 #include "pce.h"
 
-namespace PCE
+namespace PCE {
+
+void SongPacker::Envelope::pack(DMF::Envelope const& src)
 {
+    size = src.size;
+    loop = src.loop;
+    for(size_t i=0; i<size; i++)
+    {
+        data[i] = src.value[4*i];
+    }
+}
+
+void SongPacker::Instrument::pack(DMF::Instrument const& src)
+{
+    mode = src.mode;
+    standard.arpeggioMode = src.std.arpeggioMode;
+    standard.volume.pack(src.std.volume);
+    standard.arpeggio.pack(src.std.arpeggio);
+    standard.noise.pack(src.std.noise);
+    standard.wave.pack(src.std.wave);
+}
 
 void SongPacker::packPatternMatrix(DMF::Song const& song)
 {

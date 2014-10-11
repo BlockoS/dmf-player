@@ -28,6 +28,20 @@ int main(int argc, char** argv)
         ,song.infos.author.data);
     
     ////
+    for(size_t i=0; i<song.instrument.size(); i++)
+    {
+        printf("%ld %d:\n", i, song.instrument[i].std.noise.size);
+        for(size_t j=0; j<song.instrument[i].std.noise.size; j++)
+        {
+            printf("%02x%02x%02x%02x ",
+                    song.instrument[i].std.noise.value[4*j  ],
+                    song.instrument[i].std.noise.value[4*j+1],
+                    song.instrument[i].std.noise.value[4*j+2],
+                    song.instrument[i].std.noise.value[4*j+3]);
+            if(((j+1)%8) == 0) printf("\n");
+        }
+        printf("\n\n");
+    }
     
     return 0;
 }

@@ -45,6 +45,30 @@ namespace PCE
                 std::vector<int> packedOffset;
             };
 
+            struct Envelope
+            {
+                uint8_t data[128];
+                uint8_t size;
+                uint8_t loop;
+                
+                void pack(DMF::Envelope const& src);
+            };
+
+            struct Instrument
+            {
+                uint8_t mode;
+                struct
+                {   
+                    Envelope volume;
+                    Envelope arpeggio;
+                    Envelope noise;
+                    Envelope wave;
+                    uint8_t  arpeggioMode;
+                } standard;
+                
+                void pack(DMF::Instrument const& src);
+            };
+
         public:
             SongPacker();
             ~SongPacker();
@@ -55,7 +79,8 @@ namespace PCE
             void packPatternData(DMF::Song const& song);
             
         private:
-            std::vector<uint8_t>      _buffer;
+            std::vector<Instrument>    _instruments;
+            std::vector<uint8_t>       _buffer;
             std::vector<PatternMatrix> _matrix;
     };
 }
