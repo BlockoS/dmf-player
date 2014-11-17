@@ -6,6 +6,7 @@ int main(int argc, char** argv)
 {
     DMF::Song song;
     DMF::DataReader reader;
+    PCE::SongPacker packer;
     bool ok;
 
     if(argc != 2)
@@ -21,27 +22,9 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    printf("version: %d\nsystem: %d\nname: %s\nauthor: %s\n"
-        ,song.infos.version
-        ,song.infos.system
-        ,song.infos.name.data
-        ,song.infos.author.data);
     
-    ////
-    for(size_t i=0; i<song.instrument.size(); i++)
-    {
-        printf("%ld %d:\n", i, song.instrument[i].std.noise.size);
-        for(size_t j=0; j<song.instrument[i].std.noise.size; j++)
-        {
-            printf("%02x%02x%02x%02x ",
-                    song.instrument[i].std.noise.value[4*j  ],
-                    song.instrument[i].std.noise.value[4*j+1],
-                    song.instrument[i].std.noise.value[4*j+2],
-                    song.instrument[i].std.noise.value[4*j+3]);
-            if(((j+1)%8) == 0) printf("\n");
-        }
-        printf("\n\n");
-    }
+    packer.pack(song);
+    packer.output(stdout);
     
     return 0;
 }

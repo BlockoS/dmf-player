@@ -52,6 +52,7 @@ namespace PCE
                 uint8_t loop;
                 
                 void pack(DMF::Envelope const& src);
+                void output(FILE* stream, char const* prefix, char const* name, uint32_t index);
             };
 
             struct Instrument
@@ -67,18 +68,29 @@ namespace PCE
                 } standard;
                 
                 void pack(DMF::Instrument const& src);
+                void output(FILE *stream, char const* prefix, uint32_t index);
             };
+
+            typedef std::vector<uint8_t> WaveTable;
 
         public:
             SongPacker();
             ~SongPacker();
-
             
+            void pack(DMF::Song const& song);
+            void output(FILE *stream);
+
         private:
             void packPatternMatrix(DMF::Song const& song);
             void packPatternData(DMF::Song const& song);
             
+            void outputWave(FILE *stream);
+            void outputInstruments(FILE *stream);
+            void outputPatternMatrix(FILE* stream, char const* name);
+
         private:
+            DMF::Infos _infos;
+            std::vector<WaveTable>     _waveTable;
             std::vector<Instrument>    _instruments;
             std::vector<uint8_t>       _buffer;
             std::vector<PatternMatrix> _matrix;
