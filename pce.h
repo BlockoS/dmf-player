@@ -86,7 +86,7 @@ namespace PCE
             
             void outputWave(FILE *stream);
             void outputInstruments(FILE *stream);
-            void outputPatternMatrix(FILE* stream, char const* name);
+            void outputPatternMatrix(FILE* stream);
 
         private:
             DMF::Infos _infos;
@@ -94,6 +94,7 @@ namespace PCE
             std::vector<Instrument>    _instruments;
             std::vector<uint8_t>       _buffer;
             std::vector<PatternMatrix> _matrix;
+            std::vector<uint8_t>       _pattern;
     };
 }
 

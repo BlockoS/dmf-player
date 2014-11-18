@@ -32,20 +32,24 @@ static void outputPointerTable(FILE *stream, char const* prefix, size_t count, s
     }
 }
 
-void SongPacker::outputPatternMatrix(FILE* stream, char const* name)
+void SongPacker::outputPatternMatrix(FILE* stream)
 {
-    // [todo]
-#if 0
+    char const* name = "matrix";
+    fprintf(stream, "%s:\n", name);
     for(size_t i=0; i<_infos.systemChanCount; i++)
     {
-        size_t size = _matrix[i].dataOffset.size();
-        size_t last = ((16+i)<size) ? 16 : (size-i);
-        for(size_t j=0; j<size; j++)
+        size_t size = _infos.totalRowsInPatternMatrix;
+        fprintf(stream, "%s_%04x:\n", name, static_cast<uint32_t>(i));
+        for(size_t j=0; j<size;)
         {
-            fprintf(stream, "$%02x%c", _matrix[i].dataOffset[j]);
+            size_t last = ((16+j)<size) ? 16 : (size-j);
+            fprintf(stream, "\t.db ");
+            for(size_t k=0; k<last; k++, j++)
+            {
+                fprintf(stream, "$%02x%c", static_cast<uint32_t>( _pattern[(size*i)+j]), (k<(last-1))?',':'\n');
+            }
         }
     }
-#endif
 }
 
 void SongPacker::Envelope::output(FILE* stream, char const* prefix, char const* name, uint32_t index)
@@ -104,7 +108,7 @@ void SongPacker::outputInstruments(FILE *stream)
 
 void SongPacker::output(FILE *stream)
 {
-    outputPatternMatrix(stream, "    ");
+    outputPatternMatrix(stream);
     outputWave(stream);
     outputInstruments(stream);
 }
@@ -112,6 +116,9 @@ void SongPacker::output(FILE *stream)
 void SongPacker::pack(DMF::Song const& song)
 {
     memcpy(&_infos, &song.infos, sizeof(DMF::Infos));
+    
+    _pattern.resize(song.patternMatrix.size());
+    std::copy(song.patternMatrix.begin(), song.patternMatrix.end(), _pattern.begin());
     
     _instruments.resize(song.instrument.size());
     for(size_t i=0; i<_instruments.size(); i++)
@@ -182,7 +189,7 @@ void SongPacker::packPatternMatrix(DMF::Song const& song)
 void SongPacker::packPatternData(DMF::Song const& song)
 {
     _buffer.clear();
-    
+    // [todo] save buffer offset per matrix element
     for(size_t i=0; i<song.infos.systemChanCount; i++)
     {
         for(size_t j=0; j<_matrix[i].dataOffset.size(); j++)
