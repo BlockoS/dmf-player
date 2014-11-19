@@ -106,11 +106,38 @@ void SongPacker::outputInstruments(FILE *stream)
     outputPointerTable(stream, "inst", _instruments.size(), 4);
 }
 
+void SongPacker::outputTracks(FILE *stream)
+{
+    fprintf(stream, "pattern:\n");
+    size_t count = 0;
+    for(size_t i=0; i<_infos.systemChanCount; i++)
+    {
+        for(size_t j=0; j<_matrix[i].dataOffset.size(); j++, count++)
+        {
+            fprintf(stream, "pattern_%04x:\n", static_cast<uint32_t>((i*_matrix[i].dataOffset.size())+j));
+            int offset = _matrix[i].bufferOffset[j];
+            size_t size = _matrix[i].bufferOffset[j+1] - _matrix[i].bufferOffset[j];
+            for(size_t k=0; k<size; )
+            {
+                size_t last = ((16+k)<size) ? 16 : (size-k);
+                fprintf(stream, "\t.db ");
+                for(size_t l=0; l<last; l++, k++)
+                {
+                    fprintf(stream,"$%02x%c", _buffer[offset++], ((l+1) < last) ? ',' : '\n');
+                }
+            }
+            
+        }
+    }
+    outputPointerTable(stream, "pattern", count, 4);
+}
+
 void SongPacker::output(FILE *stream)
 {
     outputPatternMatrix(stream);
     outputWave(stream);
     outputInstruments(stream);
+    outputTracks(stream);
 }
 
 void SongPacker::pack(DMF::Song const& song)
@@ -189,7 +216,7 @@ void SongPacker::packPatternMatrix(DMF::Song const& song)
 void SongPacker::packPatternData(DMF::Song const& song)
 {
     _buffer.clear();
-    // [todo] save buffer offset per matrix element
+    
     for(size_t i=0; i<song.infos.systemChanCount; i++)
     {
         for(size_t j=0; j<_matrix[i].dataOffset.size(); j++)
@@ -198,6 +225,8 @@ void SongPacker::packPatternData(DMF::Song const& song)
             size_t l = _matrix[i].dataOffset[j];
             
             size_t rest;
+            
+            _matrix[i].bufferOffset.push_back(_buffer.size());
             
             for(rest=0; (k<song.infos.totalRowsPerPattern) && isEmpty(song.patternData[l]); k++, l++, rest++)
             {}
@@ -268,6 +297,7 @@ void SongPacker::packPatternData(DMF::Song const& song)
                 }
             }
         }
+        _matrix[i].bufferOffset.push_back(_buffer.size());
     }
 }
 

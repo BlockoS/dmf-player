@@ -43,6 +43,7 @@ namespace PCE
             {
                 std::vector<int> dataOffset;
                 std::vector<int> packedOffset;
+                std::vector<int> bufferOffset;
             };
 
             struct Envelope
@@ -87,6 +88,7 @@ namespace PCE
             void outputWave(FILE *stream);
             void outputInstruments(FILE *stream);
             void outputPatternMatrix(FILE* stream);
+            void outputTracks(FILE *stream);
 
         private:
             DMF::Infos _infos;
