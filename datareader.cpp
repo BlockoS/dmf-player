@@ -168,7 +168,9 @@ bool DataReader::read(String& str)
     if(ok) { ok = read(str.data, str.length); }
     return ok;
 }
-
+/// Read envelope.
+/// @param [out] env Volume envelope.
+/// @return false if there is no data left to be read.
 bool DataReader::read(Envelope& env)
 {
     bool ok = read(env.size);
@@ -179,7 +181,9 @@ bool DataReader::read(Envelope& env)
     }
     return ok;
 }
-
+/// Read a single instrument.
+/// @param [out] inst Instrument.
+/// @return false if there is no data left to be read.
 bool DataReader::read(Instrument& inst)
 {
     bool ok = read(inst.name);
@@ -199,7 +203,9 @@ bool DataReader::read(Instrument& inst)
     }
     return ok;
 }
-
+/// Read a wave table.
+/// @param [out] wav Wave table.
+/// @return false if there is no data left to be read.
 bool DataReader::read(WaveTable& tbl)
 {
     bool ok;
@@ -215,7 +221,9 @@ bool DataReader::read(WaveTable& tbl)
     if(!ok) { tbl.clear(); }
     return ok;
 }
-
+/// Read song info.
+/// @param [out] Song info.
+/// @return false if there is no data left to be read.
 bool DataReader::read(Infos& nfo)
 {
     bool ok;
@@ -264,7 +272,10 @@ bool DataReader::read(Infos& nfo)
     if(ok) { ok = read(nfo.arpeggioTickSpeed); }
     return ok;
 }
-
+/// Read pattern data.
+/// @param [out] pat Pattern data.
+/// @param [in]  effectCount Number of effects per pattern entry.
+/// @return false if there is no data left to be read.
 bool DataReader::read(PatternData& data, uint8_t effectCount)
 {
     bool ok;
@@ -279,7 +290,9 @@ bool DataReader::read(PatternData& data, uint8_t effectCount)
     if(ok) { ok = read(data.instrument); }
     return ok;
 }
-
+/// Read sample.
+/// @param [out] sample Sample.
+/// @return false if there is no data left to be read.
 bool DataReader::read(Sample& sample)
 {
     bool ok;
@@ -299,7 +312,9 @@ bool DataReader::read(Sample& sample)
     }
     return ok;
 }
-
+/// Read song data.
+/// @param [out] song Song.
+/// @return false if there is no data left to be read.
 bool DataReader::read(Song &song)
 {
     size_t formatStringLen;

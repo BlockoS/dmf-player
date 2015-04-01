@@ -17,6 +17,7 @@ PSG_CHAN_COUNT  .equ $06 ; channel count
 ;;---------------------------------------------------------------------
 ; PSG control register bit masks
 PSG_CTRL_CHAN_ON        .equ %1000_0000 ; channel on (1), off(0)
+PSG_CTRL_CHAN_OFF       .equ %0000_0000 ; channel on (1), off(0)
 PSG_CTRL_WRITE_RESET    .equ %0100_0000 ; reset waveform write index to 0
 PSG_CTRL_DDA_ON         .equ %1100_0000 ; dda output on(1), off(0)
 PSG_CTRL_VOL_MASK       .equ %0001_1111 ; channel volume
@@ -100,3 +101,53 @@ psg_cpy_wav:
     cpy    #32
     bne    .copy_0
     rts
+
+
+play:
+    lda    <_current_time_tick
+    beq    .update_time_base:
+        dec    <_current_time_tick
+        rts
+.update_time_base:
+    lda    <_current_time_base
+    beq    .update_internal
+        dec    <_current_time_base
+	ldx    <_time_tick_offset
+	lda    <_time_tick, X
+	sta    <_current_time_tick
+.update_internal:
+    lda    <_time_base
+    sta    <_current_time_base
+
+    lda    <_current_row
+    and    #$01
+    sta    <_time_tick_offset
+    tax
+    lda    <_time_tick, X
+    sta    <_current_time_tick
+
+    ; [todo] foreach channel
+    lda    <_delay
+    beq    .fetch
+        dec    <_delay
+        rts
+.fetch:
+    ldy    <_index		; [todo]
+    inc    <_index		; [todo]
+    lda    [_buffer], Y		; [todo]
+    bmi    .fetch_end
+        tax
+	jmp    [init_effect], X	; [todo]
+        bra    .fetch
+.fetch_end:
+    and    #$7f
+    sta    <_delay
+    rts
+
+; base time = time base
+; time even / time odd = tick time 1 / tick time 2
+
+;-----------------------------------------------------------------------
+; later...
+; if vol slide, vol env = ignored
+;       vol = note vol + (t/speed)*vol.slide

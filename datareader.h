@@ -5,6 +5,7 @@
 
 namespace DMF {
 
+/// DMF data reader.
 class DataReader
 {
     public:
@@ -38,15 +39,37 @@ class DataReader
         /// @return false if there is no data left to be read.
         bool read(void* ptr, size_t nBytes);
         /// Read string.
-        /// @param [out] String Output string.
+        /// @param [out] str String Output string.
         /// @return false if there is no data left to be read.
         bool read(String& str);
+        /// Read song info.
+        /// @param [out] nfo Song info.
+        /// @return false if there is no data left to be read.
         bool read(Infos& nfo);
+        /// Read envelope.
+        /// @param [out] env Volume envelope.
+        /// @return false if there is no data left to be read.
         bool read(Envelope& env);
+        /// Read a single instrument.
+        /// @param [out] inst Instrument.
+        /// @return false if there is no data left to be read.
         bool read(Instrument& inst);
+        /// Read a wave table.
+        /// @param [out] wav Wave table.
+        /// @return false if there is no data left to be read.
         bool read(WaveTable& wav);
+        /// Read pattern data.
+        /// @param [out] pat Pattern data.
+        /// @param [in]  effectCount Number of effects per pattern entry.
+        /// @return false if there is no data left to be read.
         bool read(PatternData& pat, uint8_t effectCount);
+        /// Read sample.
+        /// @param [out] sample Sample.
+        /// @return false if there is no data left to be read.
         bool read(Sample& sample);
+        /// Read song data.
+        /// @param [out] song Song.
+        /// @return false if there is no data left to be read.
         bool read(Song& song);
         
         /// Compare data and move offset if they matches.
@@ -61,7 +84,9 @@ class DataReader
         bool decompress(FILE* stream);
 
     private:
+        /// Input byte buffer.
         std::vector<uint8_t> _buffer;
+        /// Current read offset in byte buffer.
         size_t _offset;
 };
 

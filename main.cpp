@@ -1,6 +1,7 @@
 #include "dmf.h"
 #include "datareader.h"
 #include "pce.h"
+#include "pcewriter.h"
 
 int main(int argc, char** argv)
 {
@@ -22,9 +23,13 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    
     packer.pack(song);
-    packer.output(stdout);
+    
+    PCE::Writer writer("song.asm");
+    
+    writer.open();
+        packer.output(writer);
+    writer.close();
     
     return 0;
 }

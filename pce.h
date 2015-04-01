@@ -14,7 +14,7 @@ namespace PCE
         Vibrato            = 0x04,
         PortToNoteVolSlide = 0x05,
         VibratoVolSlide    = 0x06,
-        Tremolo            = 0x07,
+        Tremolo            = 0x07, 
         Panning            = 0x08,
         SetSpeedValue1     = 0x09,
         VolumeSlide        = 0x0a,
@@ -36,59 +36,55 @@ namespace PCE
         Rest               = 0x80  // For values between 0 and 127
     };
     
+    struct PatternMatrix
+    {
+        std::vector<int> dataOffset;
+        std::vector<int> packedOffset;
+        std::vector<int> bufferOffset;
+    };
+
+    struct Envelope
+    {
+        uint8_t data[128];
+        uint8_t size;
+        uint8_t loop;
+        
+        void pack(DMF::Envelope const& src);
+        void output(FILE* stream, char const* prefix, char const* name, uint32_t index);
+    };
+
+    struct Instrument
+    {
+        uint8_t mode;
+        struct
+        {   
+            Envelope volume;
+            Envelope arpeggio;
+            Envelope noise;
+            Envelope wave;
+            uint8_t  arpeggioMode;
+        } standard;
+        
+        void pack(DMF::Instrument const& src);
+        void output(FILE *stream, char const* prefix, uint32_t index);
+    };
+
+    typedef std::vector<uint8_t> WaveTable;
+
+    class Writer;
+    
     class SongPacker
     {
-        public:
-            struct PatternMatrix
-            {
-                std::vector<int> dataOffset;
-                std::vector<int> packedOffset;
-                std::vector<int> bufferOffset;
-            };
-
-            struct Envelope
-            {
-                uint8_t data[128];
-                uint8_t size;
-                uint8_t loop;
-                
-                void pack(DMF::Envelope const& src);
-                void output(FILE* stream, char const* prefix, char const* name, uint32_t index);
-            };
-
-            struct Instrument
-            {
-                uint8_t mode;
-                struct
-                {   
-                    Envelope volume;
-                    Envelope arpeggio;
-                    Envelope noise;
-                    Envelope wave;
-                    uint8_t  arpeggioMode;
-                } standard;
-                
-                void pack(DMF::Instrument const& src);
-                void output(FILE *stream, char const* prefix, uint32_t index);
-            };
-
-            typedef std::vector<uint8_t> WaveTable;
-
         public:
             SongPacker();
             ~SongPacker();
             
             void pack(DMF::Song const& song);
-            void output(FILE *stream);
+            bool output(Writer& writer);
 
         private:
             void packPatternMatrix(DMF::Song const& song);
             void packPatternData(DMF::Song const& song);
-            
-            void outputWave(FILE *stream);
-            void outputInstruments(FILE *stream);
-            void outputPatternMatrix(FILE* stream);
-            void outputTracks(FILE *stream);
 
         private:
             DMF::Infos _infos;
@@ -100,4 +96,4 @@ namespace PCE
     };
 }
 
-#endif
+#endif // PCE_H
