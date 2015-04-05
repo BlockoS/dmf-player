@@ -42,13 +42,13 @@ bool Writer::write(DMF::Infos const& infos)
 {
     _prefix.assign(infos.name.data, infos.name.length);
     
-    fprintf(_output, "%s_name:          .ds \"%s\"\n"
-                     "%s_author:        .ds \"%s\"\n"
-                     "%s_timeBase:      .db %02x\n"
-                     "%s_timeTick:      .db %02x, %02x\n"
-                     "%s_patternRows:   .db %02x\n"
-                     "%s_matrixRows:    .db %02x\n"
-                     "%s_arpeggioSpeed: .db %02x\n",
+    fprintf(_output, "%s_name:          .db \"%s\"\n"
+                     "%s_author:        .db \"%s\"\n"
+                     "%s_timeBase:      .db $%02x\n"
+                     "%s_timeTick:      .db $%02x, $%02x\n"
+                     "%s_patternRows:   .db $%02x\n"
+                     "%s_matrixRows:    .db $%02x\n"
+                     "%s_arpeggioSpeed: .db $%02x\n",
                      _prefix.c_str(), infos.name.data,
                      _prefix.c_str(), infos.author.data,
                      _prefix.c_str(), infos.timeBase,
@@ -59,33 +59,47 @@ bool Writer::write(DMF::Infos const& infos)
     return true;
 }
 
-bool Writer::write(PCE::PatternMatrix const& pattern)
+bool Writer::write(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index)
 {
-    // [todo]
+    for(size_t j=0; j<pattern.dataOffset.size(); j++)
+    {
+        fprintf(_output, "%s_pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
+        int offset  = pattern.bufferOffset[j];
+        size_t size = pattern.bufferOffset[j+1] - pattern.bufferOffset[j];
+        for(size_t k=0; k<size; )
+        {
+            size_t last = ((16+k)<size) ? 16 : (size-k);
+            fprintf(_output, "\t.db ");
+            for(size_t l=0; l<last; l++, k++)
+            {
+                fprintf(_output,"$%02x%c", buffer[offset++], ((l+1) < last) ? ',' : '\n');
+            }
+        }
+    }
     return true;
 }
 
-#if 0
-static void outputPointerTable(FILE *stream, char const* prefix, size_t count, size_t perLine=16)
+void Writer::writePointerTable(size_t count, size_t perLine)
 {
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "low", "high" };
     
     for(int p=0; p<2; p++)
     {
-        fprintf(stream, "%s.%s:\n", prefix, postfix[p]);
+        fprintf(_output, "%s.%s:\n", _prefix.c_str(), postfix[p]);
         for(size_t i=0; i<count;)
         {
             size_t last = ((i+perLine) < count) ? perLine : (count-i);
-            fprintf(stream, "\t.db ");
+            fprintf(_output, "\t.db ");
             for(size_t j=0; j<last; j++, i++)
             {
-                fprintf(stream, "%s(%s_%04x)%c", op[p], prefix, static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
+                fprintf(_output, "%s(%s_pattern_%04x)%c", op[p], _prefix.c_str(), static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
             }
         }
     }
 }
 
+#if 0
 void SongPacker::outputPatternMatrix(FILE* stream)
 {
     char const* name = "matrix";
@@ -158,32 +172,6 @@ void SongPacker::outputInstruments(FILE *stream)
         _instruments[i].output(stream, "inst", i);
     }
     outputPointerTable(stream, "inst", _instruments.size(), 4);
-}
-
-void SongPacker::outputTracks(FILE *stream)
-{
-    fprintf(stream, "pattern:\n");
-    size_t count = 0;
-    for(size_t i=0; i<_infos.systemChanCount; i++)
-    {
-        for(size_t j=0; j<_matrix[i].dataOffset.size(); j++, count++)
-        {
-            fprintf(stream, "pattern_%04x:\n", static_cast<uint32_t>((i*_matrix[i].dataOffset.size())+j));
-            int offset = _matrix[i].bufferOffset[j];
-            size_t size = _matrix[i].bufferOffset[j+1] - _matrix[i].bufferOffset[j];
-            for(size_t k=0; k<size; )
-            {
-                size_t last = ((16+k)<size) ? 16 : (size-k);
-                fprintf(stream, "\t.db ");
-                for(size_t l=0; l<last; l++, k++)
-                {
-                    fprintf(stream,"$%02x%c", _buffer[offset++], ((l+1) < last) ? ',' : '\n');
-                }
-            }
-            
-        }
-    }
-    outputPointerTable(stream, "pattern", count, 4);
 }
 
 void SongPacker::output(FILE *stream)

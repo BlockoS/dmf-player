@@ -45,7 +45,7 @@ void SongPacker::pack(DMF::Song const& song)
     packPatternData(song);
 }
 
-void SongPacker::Envelope::pack(DMF::Envelope const& src)
+void Envelope::pack(DMF::Envelope const& src)
 {
     size = src.size;
     loop = src.loop;
@@ -55,7 +55,7 @@ void SongPacker::Envelope::pack(DMF::Envelope const& src)
     }
 }
 
-void SongPacker::Instrument::pack(DMF::Instrument const& src)
+void Instrument::pack(DMF::Instrument const& src)
 {
     mode = src.mode;
     standard.arpeggioMode = src.std.arpeggioMode;
@@ -180,6 +180,16 @@ bool SongPacker::output(Writer& writer)
     
     ret = writer.write(_infos);
     
+    size_t count = 0;
+    for(size_t i=0; i<_infos.systemChanCount; i++)
+    {
+        ret = writer.write(_matrix[i], _buffer, count);
+        count += _matrix[i].dataOffset.size();
+    }
+    
+    writer.writePointerTable(count, 1);
+//        outputPointerTable(stream, "pattern", count, 4);
+
     return ret;
 }
 
