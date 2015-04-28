@@ -275,7 +275,12 @@ irq_reset:
     sta    <_current_time_tick
     lda    #$00
     sta    <_current_row
-    
+
+    lda    #low(pattern_data_00)
+    sta    <_pattern_ptr.lo
+    lda    #high(pattern_data_00)
+    sta    <_pattern_ptr.hi
+
     cli
 
 .loop:
@@ -316,8 +321,8 @@ update_song:
     sta    <_current_time_tick
 
     ; Load note, effects, delay for each channel
-    ldx    #(PSG_CHAN_COUNT-1)
-.load:
+    ldx    #$00; [todo] #(PSG_CHAN_COUNT-1)
+_update_song_load:
     lda    <_pattern_ptr.lo, X
     sta    <_si
     lda    <_pattern_ptr.hi, X
@@ -325,29 +330,247 @@ update_song:
     
     ; Loop until we hit one of the rest effects
     cly
-.load_loop:
+_update_song_load_loop:
     lda    [_si], Y
-    
-    ; [todo] load another byte if effect is not noteOff or rest
-    
     iny
-    cmp    RestEx
-    bcc    .load_loop
+    cmp    #RestEx
+    bcs    .rest
+        asl    A
+        phx
+        tax
+        jmp    [fx_load_table, X]
+.rest:
 
     ; Move pattern pointer to the next entry
-    tya
-    clc
-    adc    <_pattern_ptr.lo, X
-    sta    <_pattern_ptr.lo, X
-    lda    <_pattern_ptr.hi, X
-    adc    #$00
-    sta    <_pattern_ptr.hi, X
+; [todo]   tya
+; [todo]   clc
+; [todo]   adc    <_pattern_ptr.lo, X
+; [todo]   sta    <_pattern_ptr.lo, X
+; [todo]   lda    <_pattern_ptr.hi, X
+; [todo]   adc    #$00
+; [todo]   sta    <_pattern_ptr.hi, X
 
     dex
-    bpl    .load
+    bpl    _update_song_load
 
     ; [todo] update states
     rts
+
+load_arpeggio:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_portamento_up:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_portamento_down:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_portamento_to_note:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_vibrato:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_port_to_note_vol_slide:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_vibrato_vol_slide:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_tremolo:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_panning:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_set_speed_value1:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_volume_slide:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_position_jump:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_retrig:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_pattern_break:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_extended_commands:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_set_speed_value2:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_set_wave:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_enable_noise_channel:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_set_LFO_mode:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_set_LFO_speed:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_enable_sample_output:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_set_volume:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_set_instrument:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_note:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_undefined:
+    lda    [_si], Y
+    iny
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+load_note_off:
+    ; [todo]
+    plx
+    jmp    _update_song_load_loop
+
+fx_load_table:
+    .dw load_arpeggio
+    .dw load_portamento_up
+    .dw load_portamento_down
+    .dw load_portamento_to_note
+    .dw load_vibrato
+    .dw load_port_to_note_vol_slide
+    .dw load_vibrato_vol_slide
+    .dw load_tremolo
+    .dw load_panning
+    .dw load_set_speed_value1
+    .dw load_volume_slide
+    .dw load_position_jump
+    .dw load_retrig
+    .dw load_pattern_break
+    .dw load_extended_commands
+    .dw load_set_speed_value2
+    .dw load_set_wave
+    .dw load_enable_noise_channel
+    .dw load_set_LFO_mode
+    .dw load_set_LFO_speed
+    .dw load_undefined
+    .dw load_undefined
+    .dw load_undefined
+    .dw load_enable_sample_output
+    .dw load_undefined
+    .dw load_undefined
+    .dw load_set_volume
+    .dw load_set_instrument
+    .dw load_undefined
+    .dw load_undefined
+    .dw load_undefined
+    .dw load_undefined
+    .dw load_note
+    .dw load_note_off
 
 pattern_data_00:
     .db $20,$c2,$1a,$06,$1b,$01,$0a,$10,$10,$01,$8f,$20,$62,$1a,$15,$1b
