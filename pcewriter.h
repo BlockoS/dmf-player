@@ -17,7 +17,9 @@ namespace PCE
             bool write(DMF::Infos const& infos);
             bool write(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index);
             void writePointerTable(size_t count, size_t perLine=16);
-
+            
+            bool write(std::vector<WaveTable> const& wavetable);
+            
         private:
             std::string _filename;
             std::string _prefix;

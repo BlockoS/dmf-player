@@ -180,6 +180,8 @@ bool SongPacker::output(Writer& writer)
     
     ret = writer.write(_infos);
     
+    ret = writer.write(_waveTable);
+    
     size_t count = 0;
     for(size_t i=0; i<_infos.systemChanCount; i++)
     {

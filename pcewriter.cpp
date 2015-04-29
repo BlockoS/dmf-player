@@ -99,6 +99,43 @@ void Writer::writePointerTable(size_t count, size_t perLine)
     }
 }
 
+bool Writer::write(std::vector<WaveTable> const& wavetable)
+{
+    static char const* postfix[] = { "lo", "hi" };
+    static char const* op[] = { "dwl", "dwh" };
+    
+    for(size_t i=0; i<2; i++)
+    {
+        size_t size = wavetable.size();
+        fprintf(_output, "%s.wav.%s:\n", _prefix.c_str(), postfix[i]);
+        for(size_t j=0; j<size; )
+        {
+            size_t last = ((16+j)<size) ? 16 : (size-j);
+            fprintf(_output, "\t.%s ", op[i]);
+            for(size_t k=0; k<last; j++, k++)
+            {
+                fprintf(_output, "%s.wav_%04lx%c", _prefix.c_str(), j, (k<(last-1))?',':'\n');
+            }
+        }
+    }
+    
+    for(size_t i=0; i<wavetable.size(); i++)
+    {
+        size_t size = wavetable[i].size();
+        fprintf(_output, "%s.wav_%04lx:\n", _prefix.c_str(), i);
+        for(size_t j=0; j<wavetable[i].size(); )
+        {
+            size_t last = ((16+j)<size) ? 16 : (size-j);
+            fprintf(_output, "\t.db ");
+            for(size_t k=0; (k<16) && (j<wavetable[i].size()); j++, k++)
+            {
+                fprintf(_output, "$%02x%c", wavetable[i][j], (k<(last-1))?',':'\n');
+            }
+        }
+    }
+    return true;
+}
+
 #if 0
 void SongPacker::outputPatternMatrix(FILE* stream)
 {
