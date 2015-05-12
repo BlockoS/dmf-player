@@ -14,7 +14,7 @@ namespace PCE
         Vibrato            = 0x04,
         PortToNoteVolSlide = 0x05,
         VibratoVolSlide    = 0x06,
-        Tremolo            = 0x07, 
+        Tremolo            = 0x07,
         Panning            = 0x08,
         SetSpeedValue1     = 0x09,
         VolumeSlide        = 0x0a,

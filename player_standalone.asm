@@ -58,8 +58,20 @@ _current_time_base  .ds 1
 _current_time_tick  .ds 1
 _time_base          .ds 1
 _time_tick          .ds 2
+_tone               .ds PSG_CHAN_COUNT
+_frequency.lo       .ds PSG_CHAN_COUNT
+_frequency.hi       .ds PSG_CHAN_COUNT
 _pattern_ptr.lo     .ds PSG_CHAN_COUNT
 _pattern_ptr.hi     .ds PSG_CHAN_COUNT
+_wave_table_ptr.lo  .ds 2
+_wave_table_ptr.hi  .ds 2
+
+; [todo] move to .bss ?
+_wave_copy          .ds 1 ; tin
+_wave_copy_src      .ds 2
+_wave_copy_dst      .ds 2
+_wave_copy_len      .ds 2
+_wave_copy_rts      .ds 1 ; rts
 
 ;;---------------------------------------------------------------------
 ; Song effects.
@@ -133,46 +145,6 @@ Rest               = $80 ; For values between 0 and 127
     .bank 0
         .org $E000
 
-;;---------------------------------------------------------------------
-; name : psg_cpy_wav
-; desc : Copy data to psg waveform buffer.
-; in   : _si source address
-; out  : nothing
-;;---------------------------------------------------------------------
-psg_cpy_wav:
-    ; Enable write buffer
-    stz    psg_ctrl
-    ; Copy 32 bytes
-    ; [todo] maybe completly unroll it
-    cly
-.copy_0:
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    lda    [_si], Y
-    sta    psg_wavebuf
-    iny
-    cpy    #32
-    bne    .copy_0
-    rts
 
 ; base time = time base
 ; time even / time odd = tick time 1 / tick time 2
@@ -281,6 +253,18 @@ irq_reset:
     lda    #high(pattern_data_00)
     sta    <_pattern_ptr.hi
 
+    lda    #low(song.wav.lo)
+    sta    <_wave_table_ptr.lo
+    lda    #high(song.wav.lo)
+    sta    <_wave_table_ptr.lo+1
+    
+    lda    #low(song.wav.hi)
+    sta    <_wave_table_ptr.hi
+    lda    #high(song.wav.hi)
+    sta    <_wave_table_ptr.hi+1
+
+    jsr    init_player
+
     cli
 
 .loop:
@@ -290,6 +274,29 @@ irq_reset:
     nop
     nop
     nop
+
+;;---------------------------------------------------------------------
+; name : init_player
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
+init_player:
+    ; [todo] song index and setup pointers
+
+    ; setup wave copy
+    lda    #$d3                 ; tin
+    sta    <_wave_copy
+    lda    #32
+    sta    <_wave_copy_len
+    stz    <_wave_copy_len+1
+    lda    #$60                 ; rts
+    sta    <_wave_copy_rts
+    lda    #low(psg_wavebuf)
+    sta    <_wave_copy_dst
+    lda    #high(psg_wavebuf)
+    sta    <_wave_copy_dst+1
+    rts
 
 ;;---------------------------------------------------------------------
 ; name : update_song
@@ -337,7 +344,7 @@ _update_song_load_loop:
     bcs    .rest
         asl    A
         phx
-        tax
+        sax
         jmp    [fx_load_table, X]
 .rest:
 
@@ -471,7 +478,20 @@ load_set_speed_value2:
 load_set_wave:
     lda    [_si], Y
     iny
-    ; [todo]
+    say
+    
+    ; A contains the index of the wave table to be loaded.
+    lda    [_wave_table_ptr.lo], Y
+    sta    <_wave_copy_src
+    lda    [_wave_table_ptr.hi], Y
+    sta    <_wave_copy_src+1
+    
+    ; Enable write buffer
+    stz    psg_ctrl
+    ; Copy wave buffer
+    jsr    _wave_copy
+    
+    say
     plx
     jmp    _update_song_load_loop
 
@@ -520,8 +540,23 @@ load_set_instrument:
 load_note:
     lda    [_si], Y
     iny
-    ; [todo]
+    
+    phy
     plx
+    
+    sta    <_tone, X
+    tay
+
+    lda    freq_table.lo, Y
+    sta    <_frequency.lo, X
+    sta    psg_freq.lo
+
+    lda    freq_table.hi, Y
+    sta    <_frequency.hi, X
+    sta    psg_freq.hi
+
+    ply
+    
     jmp    _update_song_load_loop
 
 load_undefined:
@@ -573,8 +608,20 @@ fx_load_table:
     .dw load_note_off
 
 pattern_data_00:
-    .db $20,$c2,$1a,$06,$1b,$01,$0a,$10,$10,$01,$8f,$20,$62,$1a,$15,$1b
-    .db $00,$0a,$10,$10,$00,$8f
+    .db $10, $00, $10, $01, $8f
+
+song.wav.lo:
+    .dwl song.wav_0000,song.wav_0001
+song.wav.hi:
+    .dwh song.wav_0000,song.wav_0001
+song.wav_0000:
+    .db $01,$03,$05,$07,$09,$0b,$0d,$0f,$11,$13,$15,$17,$19,$1b,$1d,$1f
+    .db $1f,$1d,$1b,$19,$17,$15,$13,$11,$0f,$0d,$0b,$09,$07,$05,$03,$01
+song.wav_0001:
+    .db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$0f,$0f,$0f,$0f,$0f
+    .db $0f,$0f,$0f,$0f,$0f,$0f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f
+
+    .include "frequency.inc"
 
 ;----------------------------------------------------------------------
 ; Vector table

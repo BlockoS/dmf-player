@@ -102,7 +102,6 @@ psg_cpy_wav:
     bne    .copy_0
     rts
 
-
 play:
     lda    <_current_time_tick
     beq    .update_time_base:
@@ -112,9 +111,9 @@ play:
     lda    <_current_time_base
     beq    .update_internal
         dec    <_current_time_base
-	ldx    <_time_tick_offset
-	lda    <_time_tick, X
-	sta    <_current_time_tick
+    ldx    <_time_tick_offset
+    lda    <_time_tick, X
+    sta    <_current_time_tick
 .update_internal:
     lda    <_time_base
     sta    <_current_time_base
@@ -126,22 +125,40 @@ play:
     lda    <_time_tick, X
     sta    <_current_time_tick
 
-    ; [todo] foreach channel
-    lda    <_delay
+    ldx    #PSG_CHAN_COUNT
+    stx    <_current_chan
+    
+.chan_loop:
+    lda    <_delay, X
     beq    .fetch
-        dec    <_delay
-        rts
+        dec    <_delay, X
+        dex
+        bne    .chan_loop
 .fetch:
-    ldy    <_index		; [todo]
-    inc    <_index		; [todo]
-    lda    [_buffer], Y		; [todo]
-    bmi    .fetch_end
-        tax
-	jmp    [init_effect], X	; [todo]
-        bra    .fetch
-.fetch_end:
+    inc    <_buffer.lo, X
+    bne    .no_inc
+        inc    <_buffer.hi, X
+.no_inc:
+    lda    <_buffer.lo, X
+    sta    <_ptr
+    lda    <_buffer.hi, X
+    sta    <_ptr+1
+
+    lda    [_ptr]
+    pha
+    
+        ; Compute effect
+    
+    pla
+    cmp    #$79
+    bcs    .fetch
+    
     and    #$7f
     sta    <_delay
+    
+    dex
+    bne    .chan_loop
+    
     rts
 
 ; base time = time base
