@@ -58,11 +58,13 @@ _current_time_base  .ds 1
 _current_time_tick  .ds 1
 _time_base          .ds 1
 _time_tick          .ds 2
+_pattern_index      .ds 1
 _tone               .ds PSG_CHAN_COUNT
 _frequency.lo       .ds PSG_CHAN_COUNT
 _frequency.hi       .ds PSG_CHAN_COUNT
 _pattern_ptr.lo     .ds PSG_CHAN_COUNT
 _pattern_ptr.hi     .ds PSG_CHAN_COUNT
+_rest               .ds PSG_CHAN_COUNT
 _wave_table_ptr.lo  .ds 2
 _wave_table_ptr.hi  .ds 2
 
@@ -248,11 +250,22 @@ irq_reset:
     lda    #$00
     sta    <_current_row
 
+    clx
+.l1:
     lda    #low(pattern_data_00)
-    sta    <_pattern_ptr.lo
+    sta    <_pattern_ptr.lo, X
     lda    #high(pattern_data_00)
-    sta    <_pattern_ptr.hi
+    sta    <_pattern_ptr.hi, X
 
+    stx    psg_ch
+    lda    #$ff
+    sta    psg_mainvol
+    sta    psg_pan
+
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    .l1
+    
     lda    #low(song.wav.lo)
     sta    <_wave_table_ptr.lo
     lda    #high(song.wav.lo)
@@ -262,6 +275,9 @@ irq_reset:
     sta    <_wave_table_ptr.hi
     lda    #high(song.wav.hi)
     sta    <_wave_table_ptr.hi+1
+
+    lda    song.patternRows
+    sta    <_pattern_index
 
     jsr    init_player
 
@@ -296,6 +312,19 @@ init_player:
     sta    <_wave_copy_dst
     lda    #high(psg_wavebuf)
     sta    <_wave_copy_dst+1
+    
+    clx
+.loop:
+    ; reset rest
+    stz    <_rest, X
+    ; enable channel
+    stx    psg_ch
+    lda    #%1_00_11111
+    sta    psg_ctrl
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    .loop
+
     rts
 
 ;;---------------------------------------------------------------------
@@ -328,8 +357,15 @@ update_song:
     sta    <_current_time_tick
 
     ; Load note, effects, delay for each channel
-    ldx    #$00; [todo] #(PSG_CHAN_COUNT-1)
+    ldx    #(PSG_CHAN_COUNT-1)
 _update_song_load:
+    lda    <_rest, X
+    beq    _update_song_load_start
+        dec    <_rest, X
+        bra    _update_song_next_chan
+_update_song_load_start:
+    stx    psg_ch
+
     lda    <_pattern_ptr.lo, X
     sta    <_si
     lda    <_pattern_ptr.hi, X
@@ -347,18 +383,50 @@ _update_song_load_loop:
         sax
         jmp    [fx_load_table, X]
 .rest:
-
+    beq    .extended_rest
+        and    #$7f
+        bra    .store_rest
+.extended_rest:
+        lda    [_si], Y
+        iny
+.store_rest:
+    sta    <_rest, X
+    
     ; Move pattern pointer to the next entry
-; [todo]   tya
-; [todo]   clc
-; [todo]   adc    <_pattern_ptr.lo, X
-; [todo]   sta    <_pattern_ptr.lo, X
-; [todo]   lda    <_pattern_ptr.hi, X
-; [todo]   adc    #$00
-; [todo]   sta    <_pattern_ptr.hi, X
+    tya
+    clc
+    adc    <_pattern_ptr.lo, X
+    sta    <_pattern_ptr.lo, X
+    lda    <_pattern_ptr.hi, X
+    adc    #$00
+    sta    <_pattern_ptr.hi, X
 
+_update_song_next_chan:
     dex
     bpl    _update_song_load
+
+_update_song_pattern_index:
+    dec    <_pattern_index
+    bne    .continue
+.fetch_next_pattern:
+        lda    song.patternRows     ;       [todo]
+        sta    <_pattern_index
+        ; [todo] load next pattern
+        lda    #low(pattern_data_00)    ; [todo]
+        sta    <_pattern_ptr.lo         ; [todo]
+        sta    <_pattern_ptr.lo+1       ; [todo]
+        sta    <_pattern_ptr.lo+2       ; [todo]
+        sta    <_pattern_ptr.lo+3       ; [todo]
+        sta    <_pattern_ptr.lo+4       ; [todo]
+        sta    <_pattern_ptr.lo+5       ; [todo]
+        lda    #high(pattern_data_00)   ; [todo]
+        sta    <_pattern_ptr.hi         ; [todo]
+        sta    <_pattern_ptr.hi+1       ; [todo]
+        sta    <_pattern_ptr.hi+2       ; [todo]
+        sta    <_pattern_ptr.hi+3       ; [todo]
+        sta    <_pattern_ptr.hi+4       ; [todo]
+        sta    <_pattern_ptr.hi+5       ; [todo]
+.continue:
 
     ; [todo] update states
     rts
@@ -475,23 +543,36 @@ load_set_speed_value2:
     plx
     jmp    _update_song_load_loop
 
+;;---------------------------------------------------------------------
+; name : load_set_wave
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_set_wave:
+    ; Load wave index.
     lda    [_si], Y
     iny
-    say
+    phy
     
     ; A contains the index of the wave table to be loaded.
+    tay
     lda    [_wave_table_ptr.lo], Y
     sta    <_wave_copy_src
     lda    [_wave_table_ptr.hi], Y
     sta    <_wave_copy_src+1
     
     ; Enable write buffer
+    ; [todo] save psg_ctrl
     stz    psg_ctrl
     ; Copy wave buffer
     jsr    _wave_copy
     
-    say
+    ; [todo] restore psg_ctrl
+    lda    #%1_00_11111
+    sta    psg_ctrl
+
+    ply
     plx
     jmp    _update_song_load_loop
 
@@ -537,13 +618,23 @@ load_set_instrument:
     plx
     jmp    _update_song_load_loop
 
+;;---------------------------------------------------------------------
+; name : load_note
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_note:
+    ; Load octave+note
     lda    [_si], Y
     iny
     
-    phy
+    ; Retrieve channel index.
     plx
+
+    phy
     
+    ; Save octave+note and retrieve frequency
     sta    <_tone, X
     tay
 
@@ -556,7 +647,7 @@ load_note:
     sta    psg_freq.hi
 
     ply
-    
+
     jmp    _update_song_load_loop
 
 load_undefined:
@@ -608,7 +699,17 @@ fx_load_table:
     .dw load_note_off
 
 pattern_data_00:
-    .db $10, $00, $10, $01, $8f
+    .db $10, $00, $20, $48, $83
+    .db           $20, $43, $83
+    .db           $20, $46, $83
+    .db           $20, $40, $83
+    .db $10, $01, $20, $42, $83
+    .db           $20, $44, $83
+    .db           $20, $45, $83
+    .db           $20, $43, $83
+
+; [todo::begin] dummy song
+song.patternRows: .db $20
 
 song.wav.lo:
     .dwl song.wav_0000,song.wav_0001
@@ -620,6 +721,7 @@ song.wav_0000:
 song.wav_0001:
     .db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$0f,$0f,$0f,$0f,$0f
     .db $0f,$0f,$0f,$0f,$0f,$0f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f
+; [todo::end] dummy song
 
     .include "frequency.inc"
 
