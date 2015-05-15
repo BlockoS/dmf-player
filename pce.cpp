@@ -182,16 +182,10 @@ bool SongPacker::output(Writer& writer)
     
     ret = writer.write(_waveTable);
     
-    size_t count = 0;
-    for(size_t i=0; i<_infos.systemChanCount; i++)
-    {
-        ret = writer.write(_matrix[i], _buffer, count);
-        count += _matrix[i].dataOffset.size();
-    }
+    ret = writer.write(_infos, _pattern);
     
-    writer.writePointerTable(count, 1);
-//        outputPointerTable(stream, "pattern", count, 4);
-
+    ret = writer.writePatterns(_infos, _matrix, _buffer);
+    
     return ret;
 }
 

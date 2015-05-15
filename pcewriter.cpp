@@ -1,6 +1,10 @@
+#include <regex>
 #include <cstdio>
 #include <cstring>
 #include <cerrno>
+
+#include <iostream>
+
 #include "pcewriter.h"
 
 namespace PCE
@@ -41,99 +45,135 @@ void Writer::close()
 bool Writer::write(DMF::Infos const& infos)
 {
     _prefix.assign(infos.name.data, infos.name.length);
+    // Replace any invalid char by '_'.
+    std::regex reg("([^[:alnum:]._])");
+    _prefix = regex_replace(_prefix, reg, "_");
     
-    fprintf(_output, "%s_name:          .db \"%s\"\n"
-                     "%s_author:        .db \"%s\"\n"
-                     "%s_timeBase:      .db $%02x\n"
-                     "%s_timeTick:      .db $%02x, $%02x\n"
-                     "%s_patternRows:   .db $%02x\n"
-                     "%s_matrixRows:    .db $%02x\n"
-                     "%s_arpeggioSpeed: .db $%02x\n",
+    fprintf(_output, "%s.name:          .db \"%s\"\n"
+                     "%s.author:        .db \"%s\"\n"
+                     "%s.timeBase:      .db $%02x\n"
+                     "%s.timeTick:      .db $%02x, $%02x\n"
+                     "%s.patternRows:   .db $%02x\n"
+                     "%s.matrixRows:    .db $%02x\n"
+                     "%s.arpeggioSpeed: .db $%02x\n"
+                     "%s.pointers:\n"
+                     "    .dw %s.wav.lo\n"
+                     "    .dw %s.wav.hi\n"
+                     "    .dw %s.matrix.lo\n"
+                     "    .dw %s.matrix.hi\n"
+                     "    .dw %s.pattern.hi\n"
+                     "    .dw %s.pattern.lo\n",
                      _prefix.c_str(), infos.name.data,
                      _prefix.c_str(), infos.author.data,
                      _prefix.c_str(), infos.timeBase,
                      _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
                      _prefix.c_str(), infos.totalRowsPerPattern,
                      _prefix.c_str(), infos.totalRowsInPatternMatrix,
-                     _prefix.c_str(), infos.arpeggioTickSpeed);
+                     _prefix.c_str(), infos.arpeggioTickSpeed,
+                     _prefix.c_str(),
+                     _prefix.c_str(),
+                     _prefix.c_str(),
+                     _prefix.c_str(),
+                     _prefix.c_str(),
+                     _prefix.c_str(),
+                     _prefix.c_str());
     return true;
 }
 
-bool Writer::write(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index)
+bool Writer::writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLine)
 {
-    for(size_t j=0; j<pattern.dataOffset.size(); j++)
+    for(size_t i=0; i<size; )
     {
-        fprintf(_output, "%s_pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
-        int offset  = pattern.bufferOffset[j];
-        size_t size = pattern.bufferOffset[j+1] - pattern.bufferOffset[j];
-        for(size_t k=0; k<size; )
+        size_t last = ((elementsPerLine+i)<size) ? elementsPerLine : (size-i);
+        fprintf(_output, "\t.db ");
+        for(size_t j=0; j<last; j++, i++)
         {
-            size_t last = ((16+k)<size) ? 16 : (size-k);
-            fprintf(_output, "\t.db ");
-            for(size_t l=0; l<last; l++, k++)
-            {
-                fprintf(_output,"$%02x%c", buffer[offset++], ((l+1) < last) ? ',' : '\n');
-            }
+            fprintf(_output,"$%02x%c", *buffer++, ((j+1) < last) ? ',' : '\n');
         }
     }
     return true;
 }
 
-void Writer::writePointerTable(size_t count, size_t perLine)
-{
-    static char const* postfix[] = { "lo", "hi" };
-    static char const* op[] = { "low", "high" };
-    
-    for(int p=0; p<2; p++)
-    {
-        fprintf(_output, "%s.%s:\n", _prefix.c_str(), postfix[p]);
-        for(size_t i=0; i<count;)
-        {
-            size_t last = ((i+perLine) < count) ? perLine : (count-i);
-            fprintf(_output, "\t.db ");
-            for(size_t j=0; j<last; j++, i++)
-            {
-                fprintf(_output, "%s(%s_pattern_%04x)%c", op[p], _prefix.c_str(), static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
-            }
-        }
-    }
-}
-
-bool Writer::write(std::vector<WaveTable> const& wavetable)
+bool Writer::writePointerTable(const char* pointerBasename, size_t count, size_t elementsPerLine)
 {
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "dwl", "dwh" };
     
-    for(size_t i=0; i<2; i++)
+    for(int p=0; p<2; p++)
     {
-        size_t size = wavetable.size();
-        fprintf(_output, "%s.wav.%s:\n", _prefix.c_str(), postfix[i]);
-        for(size_t j=0; j<size; )
+        fprintf(_output, "%s.%s.%s:\n", _prefix.c_str(), pointerBasename, postfix[p]);
+        for(size_t i=0; i<count;)
         {
-            size_t last = ((16+j)<size) ? 16 : (size-j);
-            fprintf(_output, "\t.%s ", op[i]);
-            for(size_t k=0; k<last; j++, k++)
+            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            fprintf(_output, "\t.%s ", op[p]);
+            for(size_t j=0; j<last; j++, i++)
             {
-                fprintf(_output, "%s.wav_%04lx%c", _prefix.c_str(), j, (k<(last-1))?',':'\n');
+                fprintf(_output, "%s.%s_%04x%c", _prefix.c_str(), pointerBasename, static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
             }
         }
     }
     
-    for(size_t i=0; i<wavetable.size(); i++)
-    {
-        size_t size = wavetable[i].size();
-        fprintf(_output, "%s.wav_%04lx:\n", _prefix.c_str(), i);
-        for(size_t j=0; j<wavetable[i].size(); )
-        {
-            size_t last = ((16+j)<size) ? 16 : (size-j);
-            fprintf(_output, "\t.db ");
-            for(size_t k=0; (k<16) && (j<wavetable[i].size()); j++, k++)
-            {
-                fprintf(_output, "$%02x%c", wavetable[i][j], (k<(last-1))?',':'\n');
-            }
-        }
-    }
     return true;
+}
+
+bool Writer::write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern)
+{
+    bool ret = true;
+
+    ret = writePointerTable("matrix", infos.systemChanCount, 4);
+
+    for(unsigned int j=0; ret && (j<infos.systemChanCount); j++)
+    {
+        fprintf(_output, "%s.matrix_%04x:\n", _prefix.c_str(), j);
+        ret = writeBytes(&pattern[j*infos.totalRowsInPatternMatrix], infos.totalRowsInPatternMatrix, 16);
+    }
+    return ret;
+}
+
+bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix, std::vector<uint8_t> const& buffer)
+{
+    bool ret = true;
+    size_t count = 0;
+
+    for(size_t i=0; ret && (i<infos.systemChanCount); i++)
+    {
+        ret = writePatternData(matrix[i], buffer, count);
+        count += matrix[i].dataOffset.size();
+    }
+    
+    if(ret)
+    {
+        ret = writePointerTable("pattern", count, 4);
+    }
+
+    return ret;
+}
+
+bool Writer::writePatternData(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index)
+{
+    bool ret = true;
+
+    for(size_t j=0; ret && (j<pattern.dataOffset.size()); j++)
+    {
+        fprintf(_output, "%s.pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
+        int offset  = pattern.bufferOffset[j];
+        size_t size = pattern.bufferOffset[j+1] - pattern.bufferOffset[j];
+        ret = writeBytes(&buffer[offset], size, 16);
+    }
+    return ret;
+}
+
+bool Writer::write(std::vector<WaveTable> const& wavetable)
+{
+    bool ret;
+    ret = writePointerTable("wav", wavetable.size(), 4);
+    
+    for(size_t i=0; ret && (i<wavetable.size()); i++)
+    {
+        fprintf(_output, "%s.wav_%04lx:\n", _prefix.c_str(), i);
+        ret = writeBytes(&wavetable[i][0], wavetable[i].size(), 16);
+    }
+    return ret;
 }
 
 #if 0

@@ -14,11 +14,18 @@ namespace PCE
             bool open();
             void close();
             
+            // [todo] rename
             bool write(DMF::Infos const& infos);
-            bool write(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index);
-            void writePointerTable(size_t count, size_t perLine=16);
-            
+            bool write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern);
             bool write(std::vector<WaveTable> const& wavetable);
+
+            bool writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix, std::vector<uint8_t> const& buffer);
+            
+        private:
+            bool writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLine);
+            bool writePointerTable(const char* pointerBasename, size_t count, size_t elementsPerLine);
+
+            bool writePatternData(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index);
             
         private:
             std::string _filename;
