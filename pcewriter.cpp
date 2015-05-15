@@ -44,10 +44,17 @@ void Writer::close()
 
 bool Writer::write(DMF::Infos const& infos)
 {
-    _prefix.assign(infos.name.data, infos.name.length);
-    // Replace any invalid char by '_'.
-    std::regex reg("([^[:alnum:]._])");
-    _prefix = regex_replace(_prefix, reg, "_");
+    if(infos.name.length)
+    {
+        _prefix.assign(infos.name.data, infos.name.length);
+        // Replace any invalid char by '_'.
+        std::regex reg("([^[:alnum:]._])");
+        _prefix = regex_replace(_prefix, reg, "_");
+    }
+    else
+    {
+        _prefix = "song";
+    }
     
     fprintf(_output, "%s.name:          .db \"%s\"\n"
                      "%s.author:        .db \"%s\"\n"
@@ -85,7 +92,7 @@ bool Writer::writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLi
     for(size_t i=0; i<size; )
     {
         size_t last = ((elementsPerLine+i)<size) ? elementsPerLine : (size-i);
-        fprintf(_output, "\t.db ");
+        fprintf(_output, "    .db ");
         for(size_t j=0; j<last; j++, i++)
         {
             fprintf(_output,"$%02x%c", *buffer++, ((j+1) < last) ? ',' : '\n');
@@ -105,7 +112,7 @@ bool Writer::writePointerTable(const char* pointerBasename, size_t count, size_t
         for(size_t i=0; i<count;)
         {
             size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
-            fprintf(_output, "\t.%s ", op[p]);
+            fprintf(_output, "    .%s ", op[p]);
             for(size_t j=0; j<last; j++, i++)
             {
                 fprintf(_output, "%s.%s_%04x%c", _prefix.c_str(), pointerBasename, static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
@@ -188,7 +195,7 @@ void SongPacker::outputPatternMatrix(FILE* stream)
         for(size_t j=0; j<size;)
         {
             size_t last = ((16+j)<size) ? 16 : (size-j);
-            fprintf(stream, "\t.db ");
+            fprintf(stream, "    .db ");
             for(size_t k=0; k<last; k++, j++)
             {
                 fprintf(stream, "$%02x%c", static_cast<uint32_t>( _pattern[(size*i)+j]), (k<(last-1))?',':'\n');
@@ -200,11 +207,11 @@ void SongPacker::outputPatternMatrix(FILE* stream)
 void SongPacker::Envelope::output(FILE* stream, char const* prefix, char const* name, uint32_t index)
 {
     fprintf(stream, "%s_%s_%04x:\n", prefix, name, index);
-    fprintf(stream, "\t.db $%02x,$%02x ; size, loop\n", size, loop);
+    fprintf(stream, "    .db $%02x,$%02x ; size, loop\n", size, loop);
     for(uint8_t i=0; i<size;)
     {
         uint8_t last = ((16+i)<size) ? 16 : (size-i);
-        fprintf(stream, "\t.db ");
+        fprintf(stream, "    .db ");
         for(uint8_t j=0; j<last; j++, i++)
         {
             fprintf(stream, "$%02x%c", data[i], (j<(last-1))?',':'\n');
@@ -216,7 +223,7 @@ void SongPacker::Instrument::output(FILE *stream, char const* prefix, uint32_t i
 {
     // standard
     fprintf(stream, "%s_%04x:\n", prefix, index);
-    fprintf(stream, "\t.db $%02x ; arpeggio mode\n", standard.arpeggioMode);
+    fprintf(stream, "    .db $%02x ; arpeggio mode\n", standard.arpeggioMode);
     
     standard.volume.output  (stream, prefix, "volume",   index);
     standard.arpeggio.output(stream, prefix, "arpeggio", index);
@@ -232,7 +239,7 @@ void SongPacker::outputWave(FILE *stream)
         for(size_t j=0; j<_waveTable[i].size();)
         {
             size_t last = ((j+16) < _waveTable[i].size()) ? 16 : (_waveTable[i].size()-j);
-            fprintf(stream, "\t.db ");
+            fprintf(stream, "    .db ");
             for(size_t k=0; k<last; k++, j++)
             {
                 fprintf(stream, "$%02x%c", _waveTable[i][j], (k<(last-1))?',':'\n');
