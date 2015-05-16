@@ -21,7 +21,6 @@ void SongPacker::pack(DMF::Song const& song)
     memcpy(&_infos, &song.infos, sizeof(DMF::Infos));
     
     _pattern.resize(song.patternMatrix.size());
-    std::copy(song.patternMatrix.begin(), song.patternMatrix.end(), _pattern.begin());
     
     _instruments.resize(song.instrument.size());
     for(size_t i=0; i<_instruments.size(); i++)
@@ -68,7 +67,7 @@ void Instrument::pack(DMF::Instrument const& src)
 void SongPacker::packPatternMatrix(DMF::Song const& song)
 {
     _matrix.resize(song.infos.systemChanCount);
-    
+    size_t delta = 0;
     for(size_t j=0; j<song.infos.systemChanCount; j++)
     {
         _matrix[j].dataOffset.clear();
@@ -85,7 +84,9 @@ void SongPacker::packPatternMatrix(DMF::Song const& song)
                 _matrix[j].packedOffset[pattern] = _matrix[j].dataOffset.size();
                 _matrix[j].dataOffset.push_back(offset * song.infos.totalRowsPerPattern);
             }
+            _pattern[offset] = _matrix[j].packedOffset[pattern] + delta;
         }
+        delta += _matrix[j].dataOffset.size();
     }
 }
 

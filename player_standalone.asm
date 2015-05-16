@@ -53,20 +53,39 @@ _vdc_reg    .ds 1
 _vdc_crl    .ds 1
 
 ; player specific variables
+; [todo] move some vars to bss (non pointer, etc...)
 _current_row        .ds 1
 _current_time_base  .ds 1
 _current_time_tick  .ds 1
 _time_base          .ds 1
 _time_tick          .ds 2
-_pattern_index      .ds 1
-_tone               .ds PSG_CHAN_COUNT
-_frequency.lo       .ds PSG_CHAN_COUNT
-_frequency.hi       .ds PSG_CHAN_COUNT
-_pattern_ptr.lo     .ds PSG_CHAN_COUNT
-_pattern_ptr.hi     .ds PSG_CHAN_COUNT
-_rest               .ds PSG_CHAN_COUNT
+_pattern_rows       .ds 1
+_matrix_index       .ds 1                   ; [todo] move to bss?
+_matrix_rows        .ds 1                   ; [todo] move to bss?
+_arpeggio_speed     .ds 1                   ; [todo] move to bss?
+_tone               .ds PSG_CHAN_COUNT      ; [todo] move to bss?
+_volume             .ds PSG_CHAN_COUNT      ; [todo] move to bss?
+_delay              .ds PSG_CHAN_COUNT      ; [todo] move to bss?
+_frequency.lo       .ds PSG_CHAN_COUNT      ; [todo] move to bss?
+_frequency.hi       .ds PSG_CHAN_COUNT      ; [todo] move to bss?
+
 _wave_table_ptr.lo  .ds 2
 _wave_table_ptr.hi  .ds 2
+
+_pattern_ptr_table.lo .ds 2
+_pattern_ptr_table.hi .ds 2
+
+_pattern_ptr.lo     .ds PSG_CHAN_COUNT      ; [todo] move to bss?
+_pattern_ptr.hi     .ds PSG_CHAN_COUNT      ; [todo] move to bss?
+
+_matrix_ptr:
+_matrix_ptr_ch0     .ds 2
+_matrix_ptr_ch1     .ds 2
+_matrix_ptr_ch2     .ds 2
+_matrix_ptr_ch3     .ds 2
+_matrix_ptr_ch4     .ds 2
+_matrix_ptr_ch5     .ds 2
+
 
 ; [todo] move to .bss ?
 _wave_copy          .ds 1 ; tin
@@ -106,41 +125,18 @@ RestEx             = $79 ; For values >= 128
 Rest               = $80 ; For values between 0 and 127
 
 ;;---------------------------------------------------------------------
-; name : psg_set_chn
-; desc : set psg channel
-; in   : \1 channel
+; name : get_next_pattern
+; desc : Get pattern index from matrix and setup pattern pointer.
+; in   : \1 Channel index
 ;;---------------------------------------------------------------------
-    .macro psg_set_chn 
-    lda    \1
-    sta    psg_ch
-    .endm
-
-;;---------------------------------------------------------------------
-; name : psg_set_master_vol
-; desc : Set global volume.
-; in   : \1 volume
-;;---------------------------------------------------------------------
-    .macro set_master_vol
-    lda    \1
-    sta    psg_mainvol
-    .endm
-
-;;---------------------------------------------------------------------
-; name : psg_set_chn_vol
-; desc : Set channel volume and activate it.
-; in   : \1 channel
-;        \2 volume
-;;---------------------------------------------------------------------
-    .macro psg_set_chn_vol
-    lda    \1
-    sta    psg_ctrl
-.if (\?1 = ARG_IMMED)
-    lda    #(PSG_CTRL_CHAN_ON | \2)
-.else
-    lda    \2
-    ora    #PSG_CTRL_CHAN_ON
-.endif
-    sta    psg_ch
+    .macro get_next_pattern
+    ldy    <_matrix_index
+    lda    [_matrix_ptr+(\1<<1)], Y
+    tay
+    lda    [_pattern_ptr_table.lo], Y
+    sta    <_pattern_ptr.lo+\1
+    lda    [_pattern_ptr_table.hi], Y
+    sta    <_pattern_ptr.hi+\1
     .endm
 
     .code
@@ -235,27 +231,8 @@ irq_reset:
     sta    video_data_l
     st2    #$00
 
-    lda    #$00
-    sta    <_time_base
-    lda    #$05
-    sta    <_time_tick
-    lda    #$03
-    sta    <_time_tick+1
-   
-    lda    <_time_base
-    sta    <_current_time_base
-    lda    <_time_tick
-    sta    <_current_time_tick
-    lda    #$00
-    sta    <_current_row
-
     clx
 .l1:
-    lda    #low(song.pattern_0006)
-    sta    <_pattern_ptr.lo, X
-    lda    #high(song.pattern_0006)
-    sta    <_pattern_ptr.hi, X
-
     stx    psg_ch
     lda    #$ff
     sta    psg_mainvol
@@ -264,21 +241,12 @@ irq_reset:
     inx
     cpx    #PSG_CHAN_COUNT
     bne    .l1
-    
-    lda    #low(song.wav.lo)
-    sta    <_wave_table_ptr.lo
-    lda    #high(song.wav.lo)
-    sta    <_wave_table_ptr.lo+1
-    
-    lda    #low(song.wav.hi)
-    sta    <_wave_table_ptr.hi
-    lda    #high(song.wav.hi)
-    sta    <_wave_table_ptr.hi+1
 
-    lda    song.patternRows
-    sta    <_pattern_index
-
-    jsr    init_player
+    lda    #low(song)
+    sta    <_si
+    lda    #high(song)
+    sta    <_si+1
+    jsr    load_song
 
     cli
 
@@ -291,14 +259,12 @@ irq_reset:
     nop
 
 ;;---------------------------------------------------------------------
-; name : init_player
-; desc : 
-; in   : 
+; name : load_song
+; desc : Initialize player and load song
+; in   : <_si Pointer to song data
 ; out  : 
 ;;---------------------------------------------------------------------
-init_player:
-    ; [todo] song index and setup pointers
-
+load_song:
     ; setup wave copy
     lda    #$d3                 ; tin
     sta    <_wave_copy
@@ -312,17 +278,95 @@ init_player:
     lda    #high(psg_wavebuf)
     sta    <_wave_copy_dst+1
     
+    ; load time infos
+    cly
+    lda    [_si], Y
+    iny
+    sta    <_time_base
+    lda    [_si], Y
+    iny
+    sta    <_time_tick
+    lda    [_si], Y
+    iny
+    sta    <_time_tick+1
+    
+    ; reset current time base and tick
+    lda    <_time_base
+    sta    <_current_time_base
+    lda    <_time_tick
+    sta    <_current_time_tick
+    
+    ; load pattern and matrix row count
+    lda    [_si], Y
+    iny
+    sta    <_pattern_rows
+    stz    <_current_row
+    lda    [_si], Y
+    iny
+    sta    <_matrix_rows
+    stz    <_matrix_index
+    
+    ; load arpeggio speed
+    lda    [_si], Y
+    iny
+    sta    <_arpeggio_speed
+
+    ; setup pointers
+    lda    [_si], Y
+    iny
+    sta    <_wave_table_ptr.lo
+    lda    [_si], Y
+    iny
+    sta    <_wave_table_ptr.lo+1
+    lda    [_si], Y
+    iny
+    sta    <_wave_table_ptr.hi
+    lda    [_si], Y
+    iny
+    sta    <_wave_table_ptr.hi+1
+
+    ; load pattern table pointer
+    lda    [_si], Y
+    iny
+    sta <_pattern_ptr_table.lo
+    lda    [_si], Y
+    iny
+    sta <_pattern_ptr_table.lo+1
+    lda    [_si], Y
+    iny
+    sta <_pattern_ptr_table.hi
+    lda    [_si], Y
+    iny
+    sta <_pattern_ptr_table.hi+1
+
+    ; load matrix pointers
     clx
-.loop:
-    ; reset rest
-    stz    <_rest, X
+.l0:
+    lda    [_si],Y
+    iny
+    sta    _matrix_ptr,X
+    inx
+    cpx    #(PSG_CHAN_COUNT*2)
+    bne    .l0
+    
+    clx
+.l1:
+    ; reset delay
+    stz    <_delay, X
     ; enable channel
     stx    psg_ch
     lda    #%10_0_11111
     sta    psg_ctrl
     inx
     cpx    #PSG_CHAN_COUNT
-    bne    .loop
+    bne    .l1
+
+    get_next_pattern 0
+    get_next_pattern 1
+    get_next_pattern 2
+    get_next_pattern 3
+    get_next_pattern 4
+    get_next_pattern 5
 
     rts
 
@@ -347,7 +391,7 @@ update_song:
         ; [todo] update states
         rts
 .update_internal:
-    inc    <_current_row
+    inc <_current_row
     lda    <_current_row
     and    #$01
     tax
@@ -357,9 +401,9 @@ update_song:
     ; Load note, effects, delay for each channel
     ldx    #(PSG_CHAN_COUNT-1)
 _update_song_load:
-    lda    <_rest, X
+    lda    <_delay, X
     beq    _update_song_load_start
-        dec    <_rest, X
+        dec    <_delay, X
         bra    _update_song_next_chan
 _update_song_load_start:
     stx    psg_ch
@@ -375,20 +419,20 @@ _update_song_load_loop:
     lda    [_si], Y
     iny
     cmp    #RestEx
-    bcs    .rest
+    bcs    .delay
         asl    A
         phx
         sax
         jmp    [fx_load_table, X]
-.rest:
-    beq    .extended_rest
+.delay:
+    beq    .extended_delay
         and    #$7f
-        bra    .store_rest
-.extended_rest:
+        bra    .store_delay
+.extended_delay:
         lda    [_si], Y
         iny
-.store_rest:
-    sta    <_rest, X
+.store_delay:
+    sta    <_delay, X
     
     ; Move pattern pointer to the next entry
     tya
@@ -404,26 +448,25 @@ _update_song_next_chan:
     bpl    _update_song_load
 
 _update_song_pattern_index:
-    dec    <_pattern_index
+    lda    <_current_row
+    cmp    <_pattern_rows
     bne    .continue
 .fetch_next_pattern:
-        lda    song.patternRows     ;       [todo]
-        sta    <_pattern_index
-        ; [todo] load next pattern
-        lda    #low(song.pattern_0006)  ; [todo]
-        sta    <_pattern_ptr.lo         ; [todo]
-        sta    <_pattern_ptr.lo+1       ; [todo]
-        sta    <_pattern_ptr.lo+2       ; [todo]
-        sta    <_pattern_ptr.lo+3       ; [todo]
-        sta    <_pattern_ptr.lo+4       ; [todo]
-        sta    <_pattern_ptr.lo+5       ; [todo]
-        lda    #high(song.pattern_0006) ; [todo]
-        sta    <_pattern_ptr.hi         ; [todo]
-        sta    <_pattern_ptr.hi+1       ; [todo]
-        sta    <_pattern_ptr.hi+2       ; [todo]
-        sta    <_pattern_ptr.hi+3       ; [todo]
-        sta    <_pattern_ptr.hi+4       ; [todo]
-        sta    <_pattern_ptr.hi+5       ; [todo]
+        stz    <_current_row
+
+        inc    <_matrix_index
+        lda    <_matrix_index
+        cmp    <_matrix_rows
+        bne    .update_patterns
+            stz    <_matrix_index
+.update_patterns:
+        get_next_pattern 0
+        get_next_pattern 1
+        get_next_pattern 2
+        get_next_pattern 3
+        get_next_pattern 4
+        get_next_pattern 5
+        
 .continue:
 
     ; [todo] update states
@@ -569,13 +612,15 @@ load_set_wave:
     
     ; Copy wave buffer
     jsr    _wave_copy
-    
-    ; [todo] restore psg_ctrl
-    lda    #%10_0_11111
-    sta    psg_ctrl
 
     ply
     plx
+
+    ; Restore channel volume4
+    lda    <_volume, X
+    ora    #%10_0_00000
+    sta    psg_ctrl
+    
     jmp    _update_song_load_loop
 
 load_enable_noise_channel:
@@ -609,8 +654,16 @@ load_enable_sample_output:
 load_set_volume:
     lda    [_si], Y
     iny
-    ; [todo]
+
     plx
+    lda    #$1f             ; [todo] REMOVE THIS AS SOON AS VOLSLIDE AND INSTRUMENTS ARE DONE
+    sta    <_volume, X
+    
+    ; Enable channel and set volume
+    ; [todo] check if a sanity check is necessary : and #$1f
+    ora    #%10_0_00000
+    sta    psg_ctrl
+    
     jmp    _update_song_load_loop
 
 load_set_instrument:
@@ -702,105 +755,8 @@ fx_load_table:
     .dw load_note_off
 
 ; [todo::begin] dummy song
-song.pattern_0000:
-    .db $20,$22,$1a,$1f,$1b,$00,$10,$00,$0a,$0c,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a
-    .db $1f,$81,$20,$32,$1a,$1f,$81,$20,$25,$1a,$1f,$81,$20,$29,$1a,$1f
-    .db $81,$20,$30,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a
-    .db $1f,$81,$20,$32,$1a,$1f,$81,$20,$25,$1a,$1f,$81,$20,$29,$1a,$1f
-    .db $81,$20,$30,$1a,$1f,$81
-song.pattern_0001:
-    .db $20,$22,$1a,$1f,$1b,$00,$10,$00,$0a,$0c,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a
-    .db $1f,$81,$20,$32,$1a,$1f,$81,$20,$25,$1a,$1f,$81,$20,$29,$1a,$1f
-    .db $81,$20,$30,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a
-    .db $1f,$81,$20,$32,$1a,$1f,$87
-song.pattern_0002:
-    .db $20,$22,$1a,$1f,$1b,$00,$10,$01,$0a,$05,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a
-    .db $1f,$81,$20,$32,$1a,$1f,$81,$20,$25,$1a,$1f,$81,$20,$29,$1a,$1f
-    .db $81,$20,$30,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a
-    .db $1f,$81,$20,$32,$1a,$1f,$81,$20,$25,$1a,$1f,$81,$20,$29,$1a,$1f
-    .db $81,$20,$30,$1a,$1f,$81
-song.pattern_0003:
-    .db $20,$22,$1a,$1f,$1b,$00,$10,$01,$0a,$05,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a
-    .db $1f,$81,$20,$32,$1a,$1f,$81,$20,$25,$1a,$1f,$81,$20,$29,$1a,$1f
-    .db $81,$20,$30,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22
-    .db $1a,$1f,$8f
-song.pattern_0004:
-    .db $20,$29,$1a,$1f,$1b,$00,$0a,$08,$10,$01,$81,$20,$29,$1a,$1f,$1b
-    .db $00,$81,$20,$29,$1a,$1f,$1b,$00,$81,$20,$29,$1a,$1f,$1b,$00,$81
-    .db $20,$29,$1a,$1f,$1b,$00,$81,$20,$39,$1a,$1f,$1b,$00,$81,$20,$29
-    .db $1a,$1f,$1b,$00,$81,$20,$39,$1a,$1f,$1b,$00,$81,$20,$29,$1a,$1f
-    .db $1b,$00,$81,$20,$29,$1a,$1f,$1b,$00,$81,$20,$29,$1a,$1f,$1b,$00
-    .db $81,$20,$29,$1a,$1f,$1b,$00,$81,$20,$29,$1a,$1f,$1b,$00,$81,$20
-    .db $39,$1a,$1f,$1b,$00,$81,$20,$29,$1a,$1f,$1b,$00,$81,$20,$39,$1a
-    .db $1f,$1b,$00,$81,$20,$30,$1a,$1f,$1b,$00,$81,$20,$30,$1a,$1f,$1b
-    .db $00,$81,$20,$30,$1a,$1f,$1b,$00,$81,$20,$30,$1a,$1f,$1b,$00,$81
-    .db $20,$30,$1a,$1f,$1b,$00,$81,$20,$40,$1a,$1f,$1b,$00,$81,$20,$30
-    .db $1a,$1f,$1b,$00,$81,$20,$40,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f
-    .db $1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00
-    .db $81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20
-    .db $35,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$35,$1a
-    .db $1f,$1b,$00,$81
-song.pattern_0005:
-    .db $20,$22,$1a,$1f,$1b,$00,$10,$01,$0a,$05,$81,$20,$22,$1a,$1f,$81
-    .db $20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$81,$20,$22,$1a,$1f,$1b,$00
-    .db $10,$01,$0a,$05,$81,$20,$22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20
-    .db $22,$1a,$1f,$81,$20,$22,$1a,$1f,$1b,$00,$10,$01,$0a,$05,$81,$20
-    .db $22,$1a,$1f,$81,$20,$32,$1a,$1f,$81,$20,$22,$1a,$1f,$a9
-song.pattern_0006:
-    .db $20,$25,$1a,$1f,$1b,$00,$10,$01,$0a,$05,$81,$20,$25,$1a,$1f,$1b
-    .db $00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81
-    .db $20,$35,$1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20,$25
-    .db $1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f
-    .db $1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00
-    .db $81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20
-    .db $35,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$35,$1a
-    .db $1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b
-    .db $00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81
-    .db $20,$35,$1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20,$25
-    .db $1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f
-    .db $1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00
-    .db $81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$35,$1a,$1f,$1b,$00,$81,$20
-    .db $35,$1a,$1f,$1b,$00,$81,$20,$25,$1a,$1f,$1b,$00,$81,$20,$35,$1a
-    .db $1f,$1b,$00,$81
-    
-song.patternRows: .db $40
-
-song.wav.lo:
-    .dwl song.wav_0000,song.wav_0001,song.wav_0002
-song.wav.hi:
-    .dwh song.wav_0000,song.wav_0001,song.wav_0002
-song.wav_0000:
-    .db $18,$18,$18,$19,$19,$19,$19,$19,$19,$19,$19,$19,$18,$18,$18,$16
-    .db $16,$15,$17,$14,$13,$12,$11,$0f,$0e,$0d,$0c,$0d,$0b,$08,$04,$02
-song.wav_0001:
-    .db $1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$1f,$00,$00
-    .db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-song.wav_0002:
-    .db $00,$00,$04,$04,$08,$08,$0c,$0c,$10,$10,$14,$14,$18,$18,$1c,$1c
-    .db $1c,$1c,$18,$18,$14,$14,$10,$10,$0c,$0c,$08,$08,$04,$04,$00,$00
+song:
+    .include "song.asm"
 ; [todo::end] dummy song
 
     .include "frequency.inc"
