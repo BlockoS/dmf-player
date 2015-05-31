@@ -138,6 +138,43 @@ bool Writer::write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern)
     return ret;
 }
 
+bool Writer::writeInstruments(InstrumentList const& instruments)
+{
+    bool   ret  = true;
+    const char* names[InstrumentList::EnvelopeCount] =
+    {
+        "volume",
+        "arpeggio",
+        "wave"
+    };
+    char buffer[64];
+    
+    fprintf(_output, "%s.instruments:\n", _prefix.c_str());
+    for(size_t i=0; ret && (i<InstrumentList::EnvelopeCount); i++)
+    {
+        sprintf(buffer, "%s.instruments.%s", _prefix.c_str(), names[i]);
+        fprintf(_output, "%s.size:\n", buffer);
+        ret = writeBytes(&instruments.env[i].size[0], instruments.count, 16);
+        fprintf(_output, "%s.loop:\n", buffer);
+        ret = writeBytes(&instruments.env[i].loop[0], instruments.count, 16);
+        ret = writePointerTable(buffer, instruments.count, 8);
+    }
+    
+    for(size_t i=0; ret && (i<InstrumentList::EnvelopeCount); i++)
+    {
+        for(unsigned int j=0; j<instruments.count; j++)
+        {
+            fprintf(_output, "%s.instruments.%s_%04x:\n", _prefix.c_str(), names[i], j);
+            if(instruments.env[i].size[j])
+            {
+                ret = writeBytes(&instruments.env[i].data[j][0], instruments.env[i].size[j], 16);
+            }
+        }
+    }
+    
+    return ret;
+}
+
 bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix, std::vector<uint8_t> const& buffer)
 {
     bool ret = true;
@@ -183,36 +220,5 @@ bool Writer::write(std::vector<WaveTable> const& wavetable)
     }
     return ret;
 }
-
-#if 0
-
-void SongPacker::Envelope::output(FILE* stream, char const* prefix, char const* name, uint32_t index)
-{
-    fprintf(stream, "%s_%s_%04x:\n", prefix, name, index);
-    fprintf(stream, "    .db $%02x,$%02x ; size, loop\n", size, loop);
-    for(uint8_t i=0; i<size;)
-    {
-        uint8_t last = ((16+i)<size) ? 16 : (size-i);
-        fprintf(stream, "    .db ");
-        for(uint8_t j=0; j<last; j++, i++)
-        {
-            fprintf(stream, "$%02x%c", data[i], (j<(last-1))?',':'\n');
-        }
-    }
-}
-
-void SongPacker::Instrument::output(FILE *stream, char const* prefix, uint32_t index)
-{
-    // standard
-    fprintf(stream, "%s_%04x:\n", prefix, index);
-    fprintf(stream, "    .db $%02x ; arpeggio mode\n", standard.arpeggioMode);
-    
-    standard.volume.output  (stream, prefix, "volume",   index);
-    standard.arpeggio.output(stream, prefix, "arpeggio", index);
-    standard.noise.output   (stream, prefix, "noise",    index);
-    standard.wave.output    (stream, prefix, "wave",     index);
-}
-
-#endif
 
 } // PCE

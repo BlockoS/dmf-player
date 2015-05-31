@@ -1,6 +1,7 @@
 #ifndef PCE_H
 #define PCE_H
 
+#include <array>
 #include "dmf.h"
 
 namespace PCE
@@ -45,28 +46,26 @@ namespace PCE
 
     struct Envelope
     {
-        uint8_t data[128];
-        uint8_t size;
-        uint8_t loop;
+        typedef std::array<uint8_t, 128> Data_t;
         
-        void pack(DMF::Envelope const& src);
-        void output(FILE* stream, char const* prefix, char const* name, uint32_t index);
+        std::vector<uint8_t> size;
+        std::vector<uint8_t> loop;
+        std::vector<Data_t>  data;
     };
 
-    struct Instrument
+    struct InstrumentList
     {
-        uint8_t mode;
-        struct
-        {   
-            Envelope volume;
-            Envelope arpeggio;
-            Envelope noise;
-            Envelope wave;
-            uint8_t  arpeggioMode;
-        } standard;
-        
-        void pack(DMF::Instrument const& src);
-        void output(FILE *stream, char const* prefix, uint32_t index);
+        enum EnvelopeType
+        {
+            Volume = 0,
+            Arpeggio,
+            Wave,
+            EnvelopeCount
+        };
+        // [todo] arpeggio mode
+        Envelope env[EnvelopeCount];
+        size_t   count;
+        void pack(std::vector<DMF::Instrument> const& src);
     };
 
     typedef std::vector<uint8_t> WaveTable;
@@ -89,7 +88,7 @@ namespace PCE
         private:
             DMF::Infos _infos;
             std::vector<WaveTable>     _waveTable;
-            std::vector<Instrument>    _instruments;
+            InstrumentList             _instruments;
             std::vector<uint8_t>       _buffer;
             std::vector<PatternMatrix> _matrix;
             std::vector<uint8_t>       _pattern;

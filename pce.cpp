@@ -22,11 +22,7 @@ void SongPacker::pack(DMF::Song const& song)
     
     _pattern.resize(song.patternMatrix.size());
     
-    _instruments.resize(song.instrument.size());
-    for(size_t i=0; i<_instruments.size(); i++)
-    {
-        _instruments[i].pack(song.instrument[i]);
-    }
+    _instruments.pack(song.instrument);
     
     _waveTable.resize(song.waveTable.size());
     for(size_t i=0; i<song.waveTable.size(); i++)
@@ -44,24 +40,45 @@ void SongPacker::pack(DMF::Song const& song)
     packPatternData(song);
 }
 
-void Envelope::pack(DMF::Envelope const& src)
+void InstrumentList::pack(std::vector<DMF::Instrument> const& src)
 {
-    size = src.size;
-    loop = src.loop;
-    for(size_t i=0; i<size; i++)
-    {
-        data[i] = src.value[4*i];
-    }
-}
+    count = src.size();
+    
+    env[Volume].size.resize(count);
+    env[Volume].loop.resize(count);
+    env[Volume].data.resize(count);
 
-void Instrument::pack(DMF::Instrument const& src)
-{
-    mode = src.mode;
-    standard.arpeggioMode = src.std.arpeggioMode;
-    standard.volume.pack(src.std.volume);
-    standard.arpeggio.pack(src.std.arpeggio);
-    standard.noise.pack(src.std.noise);
-    standard.wave.pack(src.std.wave);
+    env[Arpeggio].size.resize(count);
+    env[Arpeggio].loop.resize(count);
+    env[Arpeggio].data.resize(count);
+
+    env[Wave].size.resize(count);
+    env[Wave].loop.resize(count);
+    env[Wave].data.resize(count);
+
+    for(size_t i=0; i<src.size(); i++)
+    {
+        env[Volume].size[i] = src[i].std.volume.size;
+        env[Volume].loop[i] = src[i].std.volume.loop;
+        for(size_t j=0; j<env[Volume].size[i]; j++)
+        {
+            env[Volume].data[i][j] = src[i].std.volume.value[4*j];
+        }
+        
+        env[Arpeggio].size[i] = src[i].std.arpeggio.size;
+        env[Arpeggio].loop[i] = src[i].std.arpeggio.loop;
+        for(size_t j=0; j<env[Arpeggio].size[i]; j++)
+        {
+            env[Arpeggio].data[i][j] = src[i].std.arpeggio.value[4*j];
+        }
+        
+        env[Wave].size[i] = src[i].std.wave.size;
+        env[Wave].loop[i] = src[i].std.wave.loop;
+        for(size_t j=0; j<env[Wave].size[i]; j++)
+        {
+            env[Wave].data[i][j] = src[i].std.wave.value[4*j];
+        }
+    }
 }
 
 void SongPacker::packPatternMatrix(DMF::Song const& song)
@@ -184,6 +201,8 @@ bool SongPacker::output(Writer& writer)
     ret = writer.write(_infos);
     
     ret = writer.write(_waveTable);
+    
+    ret = writer.writeInstruments(_instruments);
     
     ret = writer.write(_infos, _pattern);
     

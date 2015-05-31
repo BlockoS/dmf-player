@@ -20,7 +20,8 @@ namespace PCE
             bool write(std::vector<WaveTable> const& wavetable);
 
             bool writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix, std::vector<uint8_t> const& buffer);
-            
+            bool writeInstruments(InstrumentList const& instruments);
+
         private:
             bool writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLine);
             bool writePointerTable(const char* pointerBasename, size_t count, size_t elementsPerLine);
