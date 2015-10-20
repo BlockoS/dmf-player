@@ -1,3 +1,5 @@
+// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors. All rights reserved.
+// Copyrights licensed under the New BSD License. See the accompanying LICENSE file for terms.
 #ifndef PCE_WRITER_H
 #define PCE_WRITER_H
 

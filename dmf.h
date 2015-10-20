@@ -1,3 +1,5 @@
+// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors. All rights reserved.
+// Copyrights licensed under the New BSD License. See the accompanying LICENSE file for terms.
 #ifndef DMF_H
 #define DMF_H
 
@@ -19,11 +21,9 @@ enum System
     /// Sega Genesis
     ///     Yamaha YM2612
     ///     Texas Instruments SN76489
-    ///
     SYSTEM_GENESIS  = 2,
     /// Sega Master System
     ///     Texas Instruments SN76489
-    ///
     SYSTEM_SMS      = 3,
     /// Nintendo Gameboy
     ///      Z80 Variant
