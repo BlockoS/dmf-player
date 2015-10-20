@@ -49,7 +49,7 @@ bool Writer::write(DMF::Infos const& infos)
         _prefix.assign(infos.name.data, infos.name.length);
         // Replace any invalid char by '_'.
         std::regex reg("([^[:alnum:]._])");
-        _prefix = regex_replace(_prefix, reg, "_");
+        _prefix = regex_replace(_prefix, reg, std::string("_"));
     }
     else
     {
