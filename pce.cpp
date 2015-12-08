@@ -54,10 +54,6 @@ void InstrumentList::pack(std::vector<DMF::Instrument> const& src)
     env[Arpeggio].loop.resize(count);
     env[Arpeggio].data.resize(count);
 
-    env[Wave].size.resize(count);
-    env[Wave].loop.resize(count);
-    env[Wave].data.resize(count);
-
     for(size_t i=0; i<src.size(); i++)
     {
         env[Volume].size[i] = src[i].std.volume.size;
@@ -72,13 +68,6 @@ void InstrumentList::pack(std::vector<DMF::Instrument> const& src)
         for(size_t j=0; j<env[Arpeggio].size[i]; j++)
         {
             env[Arpeggio].data[i][j] = src[i].std.arpeggio.value[4*j];
-        }
-        
-        env[Wave].size[i] = src[i].std.wave.size;
-        env[Wave].loop[i] = src[i].std.wave.loop;
-        for(size_t j=0; j<env[Wave].size[i]; j++)
-        {
-            env[Wave].data[i][j] = src[i].std.wave.value[4*j];
         }
     }
 }
@@ -199,7 +188,7 @@ void SongPacker::packPatternData(DMF::Song const& song)
 bool SongPacker::output(Writer& writer)
 {
     bool ret;
-    
+    // [todo] more serious error handling.
     ret = writer.write(_infos);
     
     ret = writer.write(_waveTable);

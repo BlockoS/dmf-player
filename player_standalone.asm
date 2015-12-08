@@ -88,6 +88,8 @@ _matrix_ptr_ch3     .ds 2
 _matrix_ptr_ch4     .ds 2
 _matrix_ptr_ch5     .ds 2
 
+_instrument_ptr:
+_instrument_vol
 
 ; [todo] move to .bss ?
 _wave_copy          .ds 1 ; tin
@@ -441,9 +443,9 @@ _update_song_load_loop:
     clc
     adc    <_pattern_ptr.lo, X
     sta    <_pattern_ptr.lo, X
-    lda    <_pattern_ptr.hi, X
-    adc    #$00
-    sta    <_pattern_ptr.hi, X
+	bcc    .l2
+        inc    <_pattern_ptr.hi, X
+.l2:
 
 _update_song_next_chan:
     dex
@@ -588,7 +590,7 @@ load_set_speed_value2:
 
 ;;---------------------------------------------------------------------
 ; name : load_set_wave
-; desc : 
+; desc : Load waveform buffer.
 ; in   : 
 ; out  : 
 ;;---------------------------------------------------------------------
@@ -653,21 +655,34 @@ load_enable_sample_output:
     plx
     jmp    _update_song_load_loop
 
+;;---------------------------------------------------------------------
+; name : load_set_volume
+; desc : Reset current volume.
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_set_volume:
+	; Load byte.
     lda    [_si], Y
     iny
-
+    ; Retrieve channel index.
     plx
-    lda    #$1f             ; [todo] REMOVE THIS AS SOON AS VOLSLIDE AND INSTRUMENTS ARE DONE
-    sta    <_volume, X
-    
+	and    #$1f 					; [todo] MAX_VOLUME
+    sta    <_volume, X    
+	; [todo] Don't do this here... Do this at note on
+	; [todo] And set volume during "update" 
     ; Enable channel and set volume
-    ; [todo] check if a sanity check is necessary : and #$1f
     ora    #%10_0_00000
     sta    psg_ctrl
     
     jmp    _update_song_load_loop
 
+;;---------------------------------------------------------------------
+; name : load_set_instrument
+; desc : Set current instrument.
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_set_instrument:
     lda    [_si], Y
     iny
@@ -677,43 +692,48 @@ load_set_instrument:
 
 ;;---------------------------------------------------------------------
 ; name : load_note
-; desc : 
+; desc : Reset current note / frequency.
 ; in   : 
 ; out  : 
 ;;---------------------------------------------------------------------
 load_note:
     ; Load octave+note
     lda    [_si], Y
-    iny
-    
+    iny    
     ; Retrieve channel index.
     plx
-
-    phy
-    
-    ; Save octave+note and retrieve frequency
+    ; Save octave+note
     sta    <_tone, X
-    tay
-
-    lda    freq_table.lo, Y
-    sta    <_frequency.lo, X
-    sta    psg_freq.lo
-
-    lda    freq_table.hi, Y
-    sta    <_frequency.hi, X
-    sta    psg_freq.hi
-
-    ply
-
+		; [todo::begin] Do this during "update"
+		phy
+		tay
+		lda    freq_table.lo, Y
+		sta    <_frequency.lo, X
+		sta    psg_freq.lo
+		lda    freq_table.hi, Y
+		sta    <_frequency.hi, X
+		sta    psg_freq.hi
+		ply
+		; [todo::end]
     jmp    _update_song_load_loop
 
+;;---------------------------------------------------------------------
+; name : load_undefined
+; desc : Handle undefined command.
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_undefined:
-    lda    [_si], Y
+	; Do nothing.
     iny
-    ; [todo]
     plx
     jmp    _update_song_load_loop
-
+;;---------------------------------------------------------------------
+; name : load_note_off
+; desc : Mute channel.
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_note_off:
     lda    #%00_0_00000
     sta    psg_ctrl

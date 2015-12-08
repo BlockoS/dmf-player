@@ -111,6 +111,13 @@ bool Writer::writePointerTable(const char* pointerBasename, size_t count, size_t
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "dwl", "dwh" };
     
+    // Compute element char count and adjust elements per line.
+    size_t elementCharLen = _prefix.size() + strlen(pointerBasename) + 8;
+    if((elementCharLen*elementsPerLine) >= MAX_CHAR_PER_LINE)
+    {
+		elementsPerLine = MAX_CHAR_PER_LINE / elementCharLen;
+	}
+    
     for(int p=0; p<2; p++)
     {
         fprintf(_output, "%s.%s.%s:\n", _prefix.c_str(), pointerBasename, postfix[p]);
@@ -146,18 +153,17 @@ bool Writer::writeInstruments(InstrumentList const& instruments)
     const char* names[InstrumentList::EnvelopeCount] =
     {
         "volume",
-        "arpeggio",
-        "wave"
+        "arpeggio"
     };
     char buffer[64];
     
     fprintf(_output, "%s.instruments:\n", _prefix.c_str());
     for(size_t i=0; ret && (i<InstrumentList::EnvelopeCount); i++)
     {
-        sprintf(buffer, "%s.instruments.%s", _prefix.c_str(), names[i]);
-        fprintf(_output, "%s.size:\n", buffer);
+        sprintf(buffer, "instruments.%s", names[i]);
+        fprintf(_output, "%s.%s.size:\n", _prefix.c_str(), buffer);
         ret = writeBytes(&instruments.env[i].size[0], instruments.count, 16);
-        fprintf(_output, "%s.loop:\n", buffer);
+        fprintf(_output, "%s.%s.loop:\n", _prefix.c_str(), buffer);
         ret = writeBytes(&instruments.env[i].loop[0], instruments.count, 16);
         ret = writePointerTable(buffer, instruments.count, 8);
     }

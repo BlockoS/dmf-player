@@ -1,5 +1,7 @@
-// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors. All rights reserved.
-// Copyrights licensed under the New BSD License. See the accompanying LICENSE file for terms.
+// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors.
+// All rights reserved.
+// Copyrights licensed under the New BSD License. See the accompanying
+// LICENSE file for terms.
 #ifndef PCE_H
 #define PCE_H
 
@@ -57,11 +59,11 @@ namespace PCE
 
     struct InstrumentList
     {
+		// Wave macros seems to be ignored.
         enum EnvelopeType
         {
             Volume = 0,
             Arpeggio,
-            Wave,
             EnvelopeCount
         };
         // [todo] arpeggio mode
