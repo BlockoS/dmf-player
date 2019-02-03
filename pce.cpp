@@ -160,8 +160,24 @@ void SongPacker::packPatternData(DMF::Song const& song)
                 {
                     if((0xffff != song.patternData[l].effect[m].code) && (0xffff != song.patternData[l].effect[m].data))
                     {
+						uint8_t data;
+						data = song.patternData[l].effect[m].data;
+						// Preprocess / fix 
+						// [todo] make a shiny method to fix effects!
+						// - Volume slide
+                        if(0x0A == song.patternData[l].effect[m].code)
+                        {
+							if(data > 0x0f)
+							{	// Positive delta.
+								data >>= 4;
+							}
+							else
+							{	// Negative delta.
+								data = ((data & 0x0f) ^ 0xff) + 1;
+							}
+						}
                         _buffer.push_back(song.patternData[l].effect[m].code);
-                        _buffer.push_back(song.patternData[l].effect[m].data);
+                        _buffer.push_back(data);
                     }
                 }
 
