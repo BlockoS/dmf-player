@@ -111,6 +111,8 @@ _pattern_ptr.hi     .ds PSG_CHAN_COUNT
 
 _delay              .ds PSG_CHAN_COUNT
 
+_volume.base        .ds PSG_CHAN_COUNT
+
 _inst.arpeggio.index .ds PSG_CHAN_COUNT
 _inst.arpeggio.lo    .ds PSG_CHAN_COUNT
 _inst.arpeggio.hi    .ds PSG_CHAN_COUNT
@@ -445,8 +447,8 @@ load_song:
     lda    #$ff
     sta    psg_pan
 
-    lda    #$1f    
-    sta    <_volume, X
+    lda    #$7c    
+    sta    _volume.base, X
     
     inx
     cpx    #PSG_CHAN_COUNT
@@ -564,8 +566,6 @@ update_states:
 
     ldx    #(PSG_CHAN_COUNT-1)
 .start:
-    stz    <_update
-
     lda    <_state, X
     sta    <_tmp
 
@@ -577,9 +577,9 @@ update_states:
         lda    _inst.volume.loop, X
         cmp    #$ff
         bne    @l2
-            rmb0    <_tmp
+            rmb0   <_tmp
             stz    <_volume, X
-            bra     .todo
+            bra    .todo
 @l2:
         sta    _inst.volume.index, X
 @l1:
@@ -591,19 +591,19 @@ update_states:
     sta    <_ptr+1
     
     lda    [_ptr], Y
+    cmp    _volume.base, X
+    bcs    @skip
+        lda    _volume.base, X    
+@skip:
     sta    <_volume, X
-    
-    inc    _inst.volume.index, X
-    smb0   <_update
-    
+    inc    _inst.volume.index, X    
 .todo:
 
     lda    <_tmp
     sta    <_state, X
 
     stx    psg_ch
-
-    bbr0    <_update, .end
+    
 .volume:
 	lda    <_fx_volume_delta, X
 	clc
@@ -611,10 +611,13 @@ update_states:
 	bpl    .no_reset.0
 		cla
 .no_reset.0:
-	cmp    #$1f
+	cmp    #$7c
 	bcc    .no_clamp.0
-		lda    #$1f
+		lda    #$7c
 .no_clamp.0:
+    sta    <_volume, X
+    lsr    A
+    lsr    A
 	ora    #%10_0_00000
 	sta    psg_ctrl
     
@@ -731,27 +734,13 @@ load_set_speed_value1:
 ;;---------------------------------------------------------------------
 ; name : load_volume_slide
 ; desc : .
-; in   : 
+; in   : e2c8
 ; out  : 
 ;;---------------------------------------------------------------------
 load_volume_slide:
     lda    [_si], Y
-    iny
-	
+    iny	
     plx
-    cmp    #$0f
-	bcc    .negativ
-.positiv:
-	lsr    A
-    lsr    A
-    lsr    A
-    lsr    A
-    sta    <_fx_volume_delta, X  
-    jmp    _update_song_load_loop
-	
-.negativ:
-	eor    #$ff
-	inc    A
     sta    <_fx_volume_delta, X  
     jmp    _update_song_load_loop
 
@@ -826,8 +815,10 @@ load_set_wave:
     plx
 
     ; Restore channel volume
-    lda    #%10_0_00000
-    ora    <_volume, X
+    lda    <_volume, X
+    lsr    A
+    lsr    A
+    ora    #%10_0_00000
     sta    psg_ctrl
     
     jmp    _update_song_load_loop
@@ -837,13 +828,6 @@ load_set_wave:
 ; desc :
 ; in   : 
 ; out  : 
-; 0000
-; 80
-; ff
-; 00
-; 00
-; bf
-; xxxxx
 ;;---------------------------------------------------------------------
 load_enable_noise_channel:
     lda    [_si], Y
@@ -858,8 +842,10 @@ load_enable_noise_channel:
     bcc    @l1
         sta    psg_noise
 
-        lda    #%10_0_00000
-        ora    <_volume, X
+        lda    <_volume, X
+        lsr    A
+        lsr    A
+        ora    #%10_0_00000
         sta    psg_ctrl
 
         bne    @l1
@@ -901,6 +887,7 @@ load_set_volume:
 
     plx
     sta    <_volume, X    
+    sta    _volume.base, X
     
     jmp    _update_song_load_loop
 
@@ -980,15 +967,21 @@ load_note:
     plx
     ; Save octave+note
     sta    <_tone, X
-		phy
-		tay
-		lda    freq_table.lo, Y
-		sta    <_frequency.lo, X
-		sta    psg_freq.lo
-		lda    freq_table.hi, Y
-		sta    <_frequency.hi, X
-		sta    psg_freq.hi
-		ply
+	phy
+	tay
+
+	lda    freq_table.lo, Y
+	sta    <_frequency.lo, X
+	sta    psg_freq.lo
+	lda    freq_table.hi, Y
+	sta    <_frequency.hi, X
+	sta    psg_freq.hi
+
+    lda    _volume.base, X
+    sta    <_volume, X
+
+	ply
+
     jmp    _update_song_load_loop
 
 ;;---------------------------------------------------------------------
@@ -1056,6 +1049,6 @@ fx_load_table:
 
 ; [todo::begin] dummy song
 song:
-    .include "song.asm"
+    .include "song2.asm"
 ; [todo::end] dummy song
     .include "frequency.inc"

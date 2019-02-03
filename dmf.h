@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors. All rights reserved.
+// Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors. All rights reserved.
 // Copyrights licensed under the New BSD License. See the accompanying LICENSE file for terms.
 #ifndef DMF_H
 #define DMF_H
@@ -14,8 +14,7 @@
 namespace DMF {
 
 /// Supported systems.
-enum System
-{
+enum System {
     /// Yamaha YMU759
     SYSTEM_YMU759   = 1,
     /// Sega Genesis
@@ -40,8 +39,7 @@ enum System
 };
 
 /// Number of channels for each supported system.
-enum Channels
-{
+enum Channels {
     CHAN_COUNT_YMU759   = 17,
     CHAN_COUNT_GENESIS  = 10,
     CHAN_COUNT_SMS      = 4,
@@ -52,31 +50,29 @@ enum Channels
 };
 
 /// Frames mode.
-enum FramesMode
-{
+enum FramesMode {
     PAL  = 0,
     NTSC = 1
 };
 
 /// Effect list.
-enum Effect : uint8_t
-{
+enum Effect : uint8_t {
     // Standard Commands
-    ARPEGGIO                            = 0x00,
-    PORTAMENTO_UP                       = 0x01,
-    PORTAMENTO_DOWN                     = 0x02,
-    PORTAMENTO_TO_NOTE                  = 0x03,
-    VIBRATO                             = 0x04,
-    PORTAMENTO_TO_NOTE_VOLUME_SLIDE     = 0x05,
-    VIBRATO_VOLUME_SIDE                 = 0x06,
-    TREMOLO                             = 0x07,
-    PANNING                             = 0x08,
-    SET_SPEED_VALUE_1                   = 0x09,
-    VOLUME_SLIDE                        = 0x0A,
-    GO_TO_PATTERN                       = 0x0B,
-    RETRIG                              = 0x0C,
-    PATTERN_BREAK                       = 0x0D,
-    SET_SPEED_VALUE_2                   = 0x0F,
+    ARPEGGIO                        = 0x00,
+    PORTAMENTO_UP                   = 0x01,
+    PORTAMENTO_DOWN                 = 0x02,
+    PORTAMENTO_TO_NOTE              = 0x03,
+    VIBRATO                         = 0x04,
+    PORTAMENTO_TO_NOTE_VOLUME_SLIDE = 0x05,
+    VIBRATO_VOLUME_SIDE             = 0x06,
+    TREMOLO                         = 0x07,
+    PANNING                         = 0x08,
+    SET_SPEED_VALUE_1               = 0x09,
+    VOLUME_SLIDE                    = 0x0A,
+    GO_TO_PATTERN                   = 0x0B,
+    RETRIG                          = 0x0C,
+    PATTERN_BREAK                   = 0x0D,
+    SET_SPEED_VALUE_2               = 0x0F,
     // Extended Commands
     NOTE_SLIDE_UP    = 0xE1,
     NOTE_SLIDE_DOWN  = 0xE2,
@@ -94,8 +90,7 @@ enum Effect : uint8_t
 };
 
 /// DMF fixed size string.
-struct String
-{
+struct String {
     /// String length.
     uint8_t length;
     /// String data.
@@ -103,8 +98,7 @@ struct String
 }; 
 
 /// DMG song infos.
-struct Infos
-{
+struct Infos {
     /// DMF version.
     uint8_t version;
     /// Target system.
@@ -136,8 +130,7 @@ struct Infos
 };
 
 /// Envelope.
-struct Envelope
-{
+struct Envelope {
     /// Length.
     uint8_t size;
     /// Loop index.
@@ -148,11 +141,9 @@ struct Envelope
 
 /// Instrument.
 /// @note Only standard instruments are supported for the moment.
-struct Instrument
-{
+struct Instrument {
     /// Standard instrument.
-    struct Standard
-    {
+    struct Standard {
         /// Volume envelope.
         Envelope volume;
         /// Arpeggio (tone envelope).
@@ -180,11 +171,9 @@ struct Instrument
 typedef std::vector<uint32_t> WaveTable;
 
 /// Pattern data.
-struct PatternData
-{
+struct PatternData {
     /// Effect.
-    struct Effect
-    {
+    struct Effect {
         /// Code.
         uint16_t code;
         /// Data.
@@ -210,8 +199,7 @@ struct PatternData
 bool isEmpty(PatternData const& src);
 
 /// PCM sample.
-struct Sample
-{
+struct Sample {
     /// Sample rate.
     uint8_t  rate;
     /// Pitch.
@@ -223,8 +211,7 @@ struct Sample
 };
 
 /// DMF Song.
-struct Song
-{
+struct Song {
     /// Infos.
     Infos  infos;
     /// Pattern matrix.

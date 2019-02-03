@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors.
+// Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors.
 // All rights reserved.
 // Copyrights licensed under the New BSD License. See the accompanying
 // LICENSE file for terms.
@@ -8,10 +8,8 @@
 #include <array>
 #include "dmf.h"
 
-namespace PCE
-{
-    enum Effect
-    {
+namespace PCE {
+    enum Effect {
         Arpeggio           = 0x00,
         PortamentoUp       = 0x01,
         PortamentoDown     = 0x02,
@@ -41,15 +39,13 @@ namespace PCE
         Rest               = 0x80  // For values between 0 and 127
     };
     
-    struct PatternMatrix
-    {
+    struct PatternMatrix {
         std::vector<int> dataOffset;
         std::vector<int> packedOffset;
         std::vector<int> bufferOffset;
     };
 
-    struct Envelope
-    {
+    struct Envelope {
         typedef std::array<uint8_t, 128> Data_t;
         
         std::vector<uint8_t> size;
@@ -57,11 +53,9 @@ namespace PCE
         std::vector<Data_t>  data;
     };
 
-    struct InstrumentList
-    {
+    struct InstrumentList {
 		// Wave macros seems to be ignored.
-        enum EnvelopeType
-        {
+        enum EnvelopeType {
             Volume = 0,
             Arpeggio,
             EnvelopeCount
@@ -76,8 +70,7 @@ namespace PCE
 
     class Writer;
     
-    class SongPacker
-    {
+    class SongPacker {
         public:
             SongPacker();
             ~SongPacker();

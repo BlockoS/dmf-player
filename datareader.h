@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors. All rights reserved.
+// Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors. All rights reserved.
 // Copyrights licensed under the New BSD License. See the accompanying LICENSE file for terms.
 #ifndef DATA_READER_H
 #define DATA_READER_H
@@ -8,8 +8,7 @@
 namespace DMF {
 
 /// DMF data reader.
-class DataReader
-{
+class DataReader {
     public:
         /// Constructor.
         DataReader();
