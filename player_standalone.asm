@@ -470,9 +470,8 @@ load_song:
 ; out  : 
 ;;---------------------------------------------------------------------
 update_song:
-    lda    <_current_time_base
-    beq    .reset_time_base
-        dec    <_current_time_base
+    dec    <_current_time_base
+    bmi    .reset_time_base
         jmp    update_states
         
 .reset_time_base:
@@ -484,15 +483,15 @@ update_song:
         jmp    update_states
         
 .update_internal:
-    inc    <_current_row
     lda    <_current_row
+    inc    <_current_row
     and    #$01
     tax
     lda    _time_tick, X
     sta    <_current_time_tick
 
     ; Load note, effects, delay for each channel
-    ldx    #(PSG_CHAN_COUNT-1)
+    clx
 _update_song_load:
     lda    _delay, X
     beq    _update_song_load_start
@@ -538,8 +537,9 @@ _update_song_load_loop:
 .l2:
 
 _update_song_next_chan:
-    dex
-    bpl    _update_song_load
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    _update_song_load
 
 _update_song_pattern_index:
     lda    <_current_row
@@ -552,6 +552,7 @@ _update_song_pattern_index:
         lda    _matrix_index
         cmp    _matrix_rows
         bne    .update_patterns
+            ; [todo] reset stuffs just as load_song
             stz    _matrix_index
 .update_patterns:
         get_next_pattern 0
@@ -733,8 +734,8 @@ load_set_speed_value1:
 
 ;;---------------------------------------------------------------------
 ; name : load_volume_slide
-; desc : .
-; in   : e2c8
+; desc : 
+; in   : 
 ; out  : 
 ;;---------------------------------------------------------------------
 load_volume_slide:
@@ -758,12 +759,46 @@ load_retrig:
     plx
     jmp    _update_song_load_loop
 
+;;---------------------------------------------------------------------
+; name : load_pattern_break
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_pattern_break:
     lda    [_si], Y
     iny
-    ; [todo]
     plx
-    jmp    _update_song_load_loop
+
+    ; [todo] add a flag that'll perform break at the end of the update
+
+    sta    <_current_row
+
+    lda    #$01
+    sta    <_current_time_tick
+    
+
+    ldx    #(PSG_CHAN_COUNT-1)
+@l0:
+    stz    _delay, X
+    dex
+    bpl    @l0
+    
+    inc    _matrix_index
+    lda    _matrix_index
+    cmp    _matrix_rows
+    bne    .update_patterns
+        ; [todo] reset stuffs just as load_song
+        stz    _matrix_index
+.update_patterns:
+    get_next_pattern 0
+    get_next_pattern 1
+    get_next_pattern 2
+    get_next_pattern 3
+    get_next_pattern 4
+    get_next_pattern 5
+
+    jmp    update_song
 
 load_extended_commands:
     lda    [_si], Y

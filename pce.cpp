@@ -96,8 +96,9 @@ void SongPacker::packPatternData(DMF::Song const& song) {
             
             _matrix[i].bufferOffset.push_back(_buffer.size());
             
-            for(rest=0; (k<song.infos.totalRowsPerPattern) && isEmpty(song.patternData[l]); k++, l++, rest++)
-            {}
+            for(rest=0; (k<song.infos.totalRowsPerPattern) && isEmpty(song.patternData[l]); k++, l++, rest++) {
+            }
+            
             if(rest) {
                 if(rest >= 128) {
                     _buffer.push_back(PCE::RestEx);
