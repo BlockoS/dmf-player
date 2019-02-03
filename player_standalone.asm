@@ -561,6 +561,9 @@ _update_song_pattern_index:
 .continue:
 
 update_states:
+
+    ldx    #(PSG_CHAN_COUNT-1)
+.start:
     stz    <_update
 
     lda    <_state, X
@@ -598,6 +601,8 @@ update_states:
     lda    <_tmp
     sta    <_state, X
 
+    stx    psg_ch
+
     bbr0    <_update, .end
 .volume:
 	lda    <_fx_volume_delta, X
@@ -614,6 +619,9 @@ update_states:
 	sta    psg_ctrl
     
 .end:
+
+    dex
+    bpl    .start
     ; [todo]
     
     rts
@@ -824,18 +832,38 @@ load_set_wave:
     
     jmp    _update_song_load_loop
 
+;;---------------------------------------------------------------------
+; name : load_enable_noise_channel
+; desc :
+; in   : 
+; out  : 
+; 0000
+; 80
+; ff
+; 00
+; 00
+; bf
+; xxxxx
+;;---------------------------------------------------------------------
 load_enable_noise_channel:
     lda    [_si], Y
-    bne    @l0
-        ora    #$80
+    and    #$1f
+    beq    @l0
+        lda    #$bf                                 ; [todo] compute frequency
 @l0:
     iny
     plx
 
-    cpx    #$04
+    cpx    #$04 
     bcc    @l1
-    and    #$1f
-    sta    psg_noise
+        sta    psg_noise
+
+        lda    #%10_0_00000
+        ora    <_volume, X
+        sta    psg_ctrl
+
+        bne    @l1
+        
 @l1:
     jmp    _update_song_load_loop
 
@@ -889,16 +917,17 @@ load_set_instrument:
     
     plx
     phy
+    
+    tay
 
     lda    <_state, X
-    and    #$03                                                 ; [todo] bitmask
+    and    #%111111_00                                                 ; [todo] bitmask
     sta    <_tmp
 
     stz   _inst.volume.index, X
     stz   _inst.arpeggio.index, X
 
     ; Setup volume and arpeggio pointers
-    tay
     lda    song.instruments.volume.size, Y
     sta    _inst.volume.size, X
     bne    .l0
@@ -914,7 +943,6 @@ load_set_instrument:
     sta    _inst.volume.hi, X
 
 .load_arpeggio
-    asl    <_tmp
     lda    song.instruments.arpeggio.size, Y
     sta    _inst.arpeggio.size, X
     bne    .l1
