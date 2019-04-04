@@ -14,39 +14,48 @@
 namespace DMF {
 
 /// Supported systems.
-enum System {
+enum System : uint8_t {
     /// Yamaha YMU759
-    SYSTEM_YMU759   = 1,
+    SYSTEM_YMU759   = 0x01,
     /// Sega Genesis
     ///     Yamaha YM2612
     ///     Texas Instruments SN76489
-    SYSTEM_GENESIS  = 2,
+    SYSTEM_GENESIS  = 0x02,
+    /// Sega Genesis (Ext CH3)
+    SYSTEM_GENESIS_EXT_CH3 = 0x12,
     /// Sega Master System
     ///     Texas Instruments SN76489
-    SYSTEM_SMS      = 3,
+    SYSTEM_SMS      = 0x03,
     /// Nintendo Gameboy
     ///      Z80 Variant
-    SYSTEM_GAMEBOY  = 4,
+    SYSTEM_GAMEBOY  = 0x04,
     /// NEC PC-Engine
     ///      Hudson Soft HuC6280
-    SYSTEM_PCENGINE = 5,
+    SYSTEM_PCENGINE = 0x05,
     /// Nintendo Famicom
     ///      Ricoh 2A03 
-    SYSTEM_NES      = 6,
+    SYSTEM_NES      = 0x06,
     /// Commodore 64
-    ///       MOS Technology SID
-    SYSTEM_C64      = 7
+    ///       MOS Technology SID 8580
+    SYSTEM_C64_8580 = 0x07,
+    /// Commodore 64
+    ///       MOS Technology SID 6581
+    SYSTEM_C64_6581 = 0x17,
+    /// Yamaha YM2151
+    SYSTEM_YM2151   = 0x08
 };
 
 /// Number of channels for each supported system.
 enum Channels {
-    CHAN_COUNT_YMU759   = 17,
-    CHAN_COUNT_GENESIS  = 10,
-    CHAN_COUNT_SMS      = 4,
-    CHAN_COUNT_GAMEBOY  = 4,
-    CHAN_COUNT_PCENGINE = 6,
-    CHAN_COUNT_NES      = 5,
-    CHAN_COUNT_C64      = 3
+    CHAN_COUNT_YMU759          = 17,
+    CHAN_COUNT_GENESIS         = 10,
+    CHAN_COUNT_GENESIS_EXT_CH3 = 13,
+    CHAN_COUNT_SMS             = 4,
+    CHAN_COUNT_GAMEBOY         = 4,
+    CHAN_COUNT_PCENGINE        = 6,
+    CHAN_COUNT_NES             = 5,
+    CHAN_COUNT_C64             = 3,
+    CHAN_COUNT_YM2151          = 8
 };
 
 /// Frames mode.
@@ -74,12 +83,16 @@ enum Effect : uint8_t {
     PATTERN_BREAK                   = 0x0D,
     SET_SPEED_VALUE_2               = 0x0F,
     // Extended Commands
+    ARPEGGIO_SPEED   = 0xE0,
     NOTE_SLIDE_UP    = 0xE1,
     NOTE_SLIDE_DOWN  = 0xE2,
+    VIBRATO_MODE     = 0xE3,
+    VIBRATO_DEPTH    = 0xE4,
     FINE_TUNE        = 0xE5,
     SET_SAMPLES_BANK = 0xEB,
     NOTE_CUT         = 0xEC,
     NOTE_DELAY       = 0xED,
+    SYNC_DELAY       = 0xEE,
     GLOBAL_FINE_TUNE = 0xEF,
     // PC Engine Commands
     SET_WAVE        = 0x10,
@@ -120,7 +133,7 @@ struct Infos {
     /// Custom frequency value.
     uint8_t customFreqValue[3];
     /// Number of rows per pattern.
-    uint8_t totalRowsPerPattern;
+    uint32_t totalRowsPerPattern;
     /// Total number of rows in the pattern matrix.
     uint8_t totalRowsInPatternMatrix;
     /// Speed of the arpeggio command.
@@ -200,12 +213,16 @@ bool isEmpty(PatternData const& src);
 
 /// PCM sample.
 struct Sample {
+    /// Name.
+    String name;
     /// Sample rate.
     uint8_t  rate;
     /// Pitch.
     uint8_t  pitch;
     /// Amp.
     uint8_t  amp;
+    /// Sample bits (8 or 16).
+    uint8_t  bits;
     /// Sample data.
     std::vector<uint16_t> data;
 };
@@ -227,6 +244,8 @@ struct Song {
     /// Samples.
     std::vector<Sample> sample;
 };
+
+void printInfos(Infos const& nfo);
 
 } // DMF
 

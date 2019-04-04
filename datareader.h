@@ -65,9 +65,10 @@ class DataReader {
         /// @return false if there is no data left to be read.
         bool read(PatternData& pat, uint8_t effectCount);
         /// Read sample.
+        /// @param [in] nfo Song infos.
         /// @param [out] sample Sample.
         /// @return false if there is no data left to be read.
-        bool read(Sample& sample);
+        bool read(Infos const& nfo, Sample &sample);
         /// Read song data.
         /// @param [out] song Song.
         /// @return false if there is no data left to be read.

@@ -174,19 +174,27 @@ void SongPacker::packPatternData(DMF::Song const& song) {
 
 bool SongPacker::output(Writer& writer)
 {
-    bool ret;
-    // [todo] more serious error handling.
-    ret = writer.write(_infos);
-    
-    ret = writer.write(_waveTable);
-    
-    ret = writer.writeInstruments(_instruments);
-    
-    ret = writer.write(_infos, _pattern);
-    
-    ret = writer.writePatterns(_infos, _matrix, _buffer);
-    
-    return ret;
+    if(!writer.write(_infos)) {
+        // [todo] msg
+        return false;
+    }
+    if(!writer.write(_waveTable)) {
+        // [todo] msg
+        return false;
+    }
+    if(!writer.writeInstruments(_instruments)) {
+        // [todo] msg
+        return false;
+    }
+    if(!writer.write(_infos, _pattern)) {
+        // [todo] msg
+        return false;
+    }
+    if(!writer.writePatterns(_infos, _matrix, _buffer)) {
+        // [todo] msg
+        return false;
+    }
+    return true;
 }
 
 } // PCE

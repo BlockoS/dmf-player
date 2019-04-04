@@ -1,0 +1,204 @@
+Delek @ 2015. Demartino Leonardo.
+Specs for DMF (DefleMask Module Format, for DefleMask 10c and above)
+
+I wrote this text file looking at the source code, any suggestion or request can be done at:
+- http://www.delek.com.ar/forum
+- http://www.facebook.com/Delek.Page
+- http://www.twitter.com/_Delek
+- http://www.soundcloud.com/Delek_Music
+- deeleek (at) gmail (.) com
+
+------------------------------------------------------------------------------------------------
+
+"//" means a comment line, not actual information of the format.
+// .DMF files are compressed using zlib, after you decompress a DMF, you will start to read the next chunk of bytes.
+// I added tabulations for better reading, also you will find IF statements that you should follow. Systems have different things to read and save.
+
+//START OF DMF FORMAT
+
+//FORMAT FLAGS
+16 Bytes: Format String, must be ".DelekDefleMask."
+1  Byte:  File Version, must be 18 (0x12) for DefleMask 10c (@01/21/2015)
+
+//SYSTEM SET
+1  Byte:  System:
+	  SYSTEM_YMU759 1     (SYSTEM_TOTAL_CHANNELS 17)
+	  SYSTEM_GENESIS 2    (SYSTEM_TOTAL_CHANNELS 10)
+	  SYSTEM_SMS 3	      (SYSTEM_TOTAL_CHANNELS 4)
+	  SYSTEM_GAMEBOY 4    (SYSTEM_TOTAL_CHANNELS 4)
+	  SYSTEM_PCENGINE 5   (SYSTEM_TOTAL_CHANNELS 6)
+	  SYSTEM_NES 6	      (SYSTEM_TOTAL_CHANNELS 5)
+	  SYSTEM_C64 7        (SYSTEM_TOTAL_CHANNELS 3)
+
+//VISUAL INFORMATION
+1 Byte:   Song Name Chars Count (0-255)
+N Bytes:  Song Name Chars
+1 Byte:	  Song Author Chars Count (0-255)
+N Bytes:  Song Author Chars
+1 Byte:	  Highlight A in patterns
+1 Byte:   Highlight B in patterns
+
+//MODULE INFORMATION
+1 Byte:	  Time Base
+1 Byte:   Tick Time 1
+1 Byte:   Tick Time 2
+1 Byte:   Frames Mode (0 = PAL, 1 = NTSC)
+1 Byte:   Using Custom HZ (If set to 1, NTSC or PAL is ignored)
+1 Byte:   Custom HZ value 1
+1 Byte:   Custom HZ value 2
+1 Byte:   Custom HZ value 3
+1 Byte:   TOTAL_ROWS_PER_PATTERN
+1 Byte:   TOTAL_ROWS_IN_PATTERN_MATRIX
+1 Byte:   Arpeggio Tick Speed
+
+//PATTERN MATRIX VALUES (A matrix of SYSTEM_TOTAL_CHANNELS x TOTAL_ROWS_IN_PATTERN_MATRIX)
+Repeat this SYSTEM_TOTAL_CHANNELS times
+	Repeat this TOTAL_ROWS_IN_PATTERN_MATRIX times
+		1 Byte: Pattern Matrix Value: (Index from SYSTEM_TOTAL_CHANNELS loop, Index from TOTAL_ROWS_IN_PATTERN_MATRIX loop)
+
+//INSTRUMENTS DATA (.DMP format is similar to this part, but there are some discrepancies, please read DMP_Specs.txt for more details)
+1 Byte: TOTAL_INSTRUMENTS
+Repeat this TOTAL_INSTRUMENTS times
+	1 Byte:   Instrument Name Chars Count (0-255)
+	N Bytes:  Instrument Name Chars
+	1 Byte:   Instrument Mode (0 = STANDARD INS, 1 = FM INS)
+
+	//PER INSTRUMENT MODE DATA
+
+		//IF INSTRUMENT MODE IS FM ( = 1)
+			1 Byte: ALG
+			1 Byte: *RESERVED (MUST BE 0)
+			1 Byte: FB
+			1 Byte: *RESERVED (MUST BE 0)
+			1 Byte: LFO (FMS on SEGA Genesis)
+			1 Byte: *RESERVED (MUST BE 0)
+			1 Byte: TOTAL_OPERATORS (0 = 2 OPERATORS, 1 = 4 OPERATORS)
+			1 Byte: LFO2 (AMS on SEGA Genesis)
+			Repeat this TOTAL_OPERATORS times
+				1 Byte: AM
+				1 Byte: AR
+				1 Byte: DAM
+				1 Byte: DR
+				1 Byte: DVB
+				1 Byte: EGT
+				1 Byte: KSL
+				1 Byte: MULT
+				1 Byte: RR
+				1 Byte: SL
+				1 Byte: SUS
+				1 Byte: TL
+				1 Byte: VIB
+				1 Byte: WS
+				1 Byte: KSR (RS on SEGA Genesis)
+				1 Byte: DT
+				1 Byte: D2R
+				1 Byte: SSGMODE (BIT 4 = 0 Disabled, 1 Enabled, BITS 0,1,2 SSG_MODE)
+
+		//IF INSTRUMENT MODE IS STANDARD ( = 0)
+			//IF NOT SYSTEM_GAMEBOY (Game Boy uses STD instruments but has internal ADSR Volume, do not read VOLUME MACRO for it)
+				//VOLUME MACRO
+				1 Byte: ENVELOPE_SIZE (0 - 127)
+				Repeat this ENVELOPE_SIZE times
+					4 Bytes: ENVELOPE_VALUE
+			//IF ENVELOPE_SIZE > 0
+				1 Byte: LOOP_POSITION (-1 = NO LOOP)
+
+			//ARPEGGIO MACRO
+			1 Byte: ENVELOPE_SIZE (0 - 127)
+			Repeat this ENVELOPE_SIZE times
+				4 Bytes: ENVELOPE_VALUE (signed int, offset=12)
+			//IF ENVELOPE_SIZE > 0
+				1 Byte: LOOP_POSITION (-1 = NO LOOP)
+			1 Byte: ARPEGGIO MACRO MODE (0 = Normal, 1 = Fixed)
+
+			//DUTY/NOISE MACRO
+			1 Byte: ENVELOPE_SIZE (0 - 127)
+			Repeat this ENVELOPE_SIZE times
+				4 Bytes: ENVELOPE_VALUE
+			//IF ENVELOPE_SIZE > 0
+				1 Byte: LOOP_POSITION (-1 = NO LOOP)
+
+			//WAVETABLE MACRO
+			1 Byte: ENVELOPE_SIZE (0 - 127)
+			Repeat this ENVELOPE_SIZE times
+				4 Bytes: ENVELOPE_VALUE
+			//IF ENVELOPE_SIZE > 0
+				1 Byte: LOOP_POSITION (-1 = NO LOOP)
+
+			//PER SYSTEM DATA
+				//IF SYSTEM_C64
+					1 Byte: Triangle Wave Enabled
+					1 Byte: Saw Wave Enabled
+					1 Byte: Pulse Wave Enabled
+					1 Byte: Noise Wave Enabled
+					1 Byte: Attack
+					1 Byte: Decay
+					1 Byte: Sustain
+					1 Byte: Release
+					1 Byte: Pulse Width
+					1 Byte: Ring Modulation Enabled
+					1 Byte: Sync Modulation Enabled
+					1 Byte: To Filter
+					1 Byte: Volume Macro To Filter Cutoff Enabled
+					1 Byte: Use Filter Values From Instrument
+					//FILTER GLOBALS
+					1 Byte: Filter Resonance
+					1 Byte: Filter Cutoff
+					1 Byte: Filter High Pass
+					1 Byte: Filter Low Pass
+					1 Byte: Filter CH2 Off
+				//IF SYSTEM_GAMEBOY
+					1 Byte: Envelope Volume
+					1 Byte: Envelope Direction
+					1 Byte: Envelope Length
+					1 Byte: Sound Length
+
+//END OF INSTRUMENTS DATA
+//WAVETABLES DATA
+1 Byte: TOTAL_WAVETABLES
+Repeat this TOTAL_WAVETABLES times
+	4 Bytes: WAVETABLE_SIZE
+	Repeat this WAVETABLE_SIZE times
+		4 Bytes: Wavetable Data
+//PATTERNS DATA
+Repeat this SYSTEM_TOTAL_CHANNELS times
+	1 Byte: CHANNEL_EFFECTS_COLUMNS_COUNT
+	Repeat this TOTAL_ROWS_IN_PATTERN_MATRIX times
+		Repeat this TOTAL_ROWS_PER_PATTERN times
+			2 Bytes: Note for this index
+			2 Bytes: Octave for this index
+			//Note values:
+			//01 C#
+			//02 D-
+			//03 D#
+			//04 E-
+			//05 F-
+			//06 F#
+			//07 G-
+			//08 G#
+			//09 A-
+			//10 A#
+			//11 B-
+			//12 C-
+
+			//Special cases:
+			//Note = 0 and octave = 0 means empty.
+			//Note = 100 means NOTE OFF, no matter what is inside the octave value.
+
+			2 Bytes: Volume for this index (-1 = Empty)
+			Repeat this CHANNEL_EFFECTS_COLUMNS_COUNT times
+				2 Bytes: Effect Code for this index (-1 = Empty)
+				2 Bytes: Effect Value for this index (-1 = Empty)
+			2 Bytes: Instrument for this index (-1 = Empty)
+
+//PCM SAMPLES DATA
+1 Byte: TOTAL_SAMPLES
+Repeat this TOTAL_SAMPLES times
+	4 Bytes: SAMPLE_SIZE
+	1 Byte: Sample Rate
+	1 Byte: Sample Pitch
+	1 Byte: Sample Amp
+	Repeat this SAMPLE_SIZE times
+		2 Bytes: Actual Sample Data
+
+//END OF DMF FORMAT

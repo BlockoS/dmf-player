@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "An error occured while reading %s\n", argv[1]);
         return 1;
     }
-    
+    printInfos(song.infos); 
     packer.pack(song);
     
     PCE::Writer writer(argv[2]);

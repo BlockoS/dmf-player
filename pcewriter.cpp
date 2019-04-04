@@ -54,7 +54,6 @@ bool Writer::write(DMF::Infos const& infos) {
                      "%s.timeTick:      .db $%02x, $%02x\n"
                      "%s.patternRows:   .db $%02x\n"
                      "%s.matrixRows:    .db $%02x\n"
-                     "%s.arpeggioSpeed: .db $%02x\n"
                      "%s.pointers:\n"
                      "    .dw %s.wav.lo\n"
                      "    .dw %s.wav.hi\n"
@@ -64,7 +63,6 @@ bool Writer::write(DMF::Infos const& infos) {
                      _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
                      _prefix.c_str(), infos.totalRowsPerPattern,
                      _prefix.c_str(), infos.totalRowsInPatternMatrix,
-                     _prefix.c_str(), infos.arpeggioTickSpeed,
                      _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),

@@ -103,8 +103,9 @@ size_t DataReader::size() {
 /// @param [out] v Unsigned byte read from buffer.
 /// @return false if there is no data left to be read.
 bool DataReader::read(uint8_t& v) {
-    if((_buffer.size() - _offset) < 1)
-    { return false; }
+    if((_buffer.size() - _offset) < 1) {
+        return false;
+    }
     v = _buffer[_offset++];
     return true;
 }
@@ -228,6 +229,9 @@ bool DataReader::read(Infos& nfo) {
             case SYSTEM_GENESIS:
                 nfo.systemChanCount = CHAN_COUNT_GENESIS;
                 break;
+            case SYSTEM_GENESIS_EXT_CH3:
+                nfo.systemChanCount = CHAN_COUNT_GENESIS_EXT_CH3;
+                break;
             case SYSTEM_SMS:
                 nfo.systemChanCount = CHAN_COUNT_SMS;
                 break;
@@ -240,8 +244,12 @@ bool DataReader::read(Infos& nfo) {
             case SYSTEM_NES:
                 nfo.systemChanCount = CHAN_COUNT_NES;
                 break;
-            case SYSTEM_C64:
+            case SYSTEM_C64_8580:
+            case SYSTEM_C64_6581:
                 nfo.systemChanCount = CHAN_COUNT_C64;
+                break;
+            case SYSTEM_YM2151:
+                nfo.systemChanCount = CHAN_COUNT_YM2151;
                 break;
             default:
                 return false;
@@ -256,9 +264,22 @@ bool DataReader::read(Infos& nfo) {
     if(ok) { ok = read(nfo.framesMode); }
     if(ok) { ok = read(nfo.customFreqFlag); }
     if(ok) { ok = read(nfo.customFreqValue, 3); }
-    if(ok) { ok = read(nfo.totalRowsPerPattern); }
+    if(ok) { 
+        if(nfo.version > 21 ) {
+            ok = read(nfo.totalRowsPerPattern);
+        }
+        else {
+            uint8_t dummy;
+            ok = read(dummy);
+            nfo.totalRowsPerPattern = dummy;
+        }
+    }
     if(ok) { ok = read(nfo.totalRowsInPatternMatrix); }
-    if(ok) { ok = read(nfo.arpeggioTickSpeed); }
+    if(ok) {
+        if(nfo.version < 21) {
+            ok = read(nfo.arpeggioTickSpeed);
+        }
+    }
     return ok;
 }
 /// Read pattern data.
@@ -282,15 +303,20 @@ bool DataReader::read(PatternData& data, uint8_t effectCount) {
     return ok;
 }
 /// Read sample.
+/// @param [in] nfo Song infos.
 /// @param [out] sample Sample.
 /// @return false if there is no data left to be read.
-bool DataReader::read(Sample& sample) {
+bool DataReader::read(Infos const& nfo, Sample& sample) {
     bool ok;
     uint32_t size;
     ok = read(size);
+    if(ok && (nfo.version > 21)) {
+        ok = read(sample.name); 
+    }
     if(ok) { ok = read(sample.rate); }
     if(ok) { ok = read(sample.pitch); }
     if(ok) { ok = read(sample.amp); }
+    if(ok) { ok = read(sample.bits); }
     if(ok && size) {
         sample.data.resize(size);
         for(size_t i=0; ok && (i<size); i++) {
@@ -389,7 +415,7 @@ bool DataReader::read(Song &song) {
     if(size) {
         song.sample.resize(size);
         for(i=0; ok && (i<size); i++) {
-            ok = read(song.sample[i]);
+            ok = read(song.infos, song.sample[i]);
         }
         if(!ok) {
             song.sample.clear();

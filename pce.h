@@ -11,10 +11,13 @@
 namespace PCE {
     enum Effect {
         Arpeggio           = 0x00,
+        // [todo] Arpeggio speed
         PortamentoUp       = 0x01,
         PortamentoDown     = 0x02,
         PortamentoToNote   = 0x03,
         Vibrato            = 0x04,
+        // [todo] Vibrato mode
+        // [todo] Vibrato depth
         PortToNoteVolSlide = 0x05,
         VibratoVolSlide    = 0x06,
         Tremolo            = 0x07,
