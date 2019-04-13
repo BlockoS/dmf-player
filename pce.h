@@ -10,34 +10,34 @@
 
 namespace PCE {
     enum Effect {
-        Arpeggio           = 0x00,
-        // [todo] Arpeggio speed
-        PortamentoUp       = 0x01,
-        PortamentoDown     = 0x02,
-        PortamentoToNote   = 0x03,
-        Vibrato            = 0x04,
-        // [todo] Vibrato mode
-        // [todo] Vibrato depth
-        PortToNoteVolSlide = 0x05,
-        VibratoVolSlide    = 0x06,
-        Tremolo            = 0x07,
-        Panning            = 0x08,
-        SetSpeedValue1     = 0x09,
-        VolumeSlide        = 0x0a,
-        PositionJump       = 0x0b,
-        Retrig             = 0x0c,
-        PatternBreak       = 0x0d,
-        ExtendedCommands   = 0x0e,
-        SetSpeedValue2     = 0x0f,
-        SetWave            = 0x10,
-        EnableNoiseChannel = 0x11,
-        SetLFOMode         = 0x12,
-        SetLFOSpeed        = 0x13,
-        EnableSampleOutput = 0x17,
-        SetVolume          = 0x1a,
-        SetInstrument      = 0x1b,
-        Note               = 0x20, // Set note+octave
-        NoteOff            = 0x21,
+        Arpeggio,
+        ArpeggioSpeed,
+        PortamentoUp,
+        PortamentoDown,
+        PortamentoToNote,
+        Vibrato,
+        VibratoMode,
+        VibratoDepth,
+        PortToNoteVolSlide,
+        VibratoVolSlide,
+        Tremolo,
+        Panning,
+        SetSpeedValue1,
+        VolumeSlide,
+        PositionJump,
+        Retrig,
+        PatternBreak,
+        ExtendedCommands,
+        SetSpeedValue2,
+        SetWave,
+        EnableNoiseChannel,
+        SetLFOMode,
+        SetLFOSpeed,
+        EnableSampleOutput,
+        SetVolume,
+        SetInstrument,
+        Note,                       // Set note+octave
+        NoteOff,
         RestEx             = 0x79, // For values >= 128
         Rest               = 0x80  // For values between 0 and 127
     };

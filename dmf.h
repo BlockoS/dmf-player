@@ -78,7 +78,7 @@ enum Effect : uint8_t {
     PANNING                         = 0x08,
     SET_SPEED_VALUE_1               = 0x09,
     VOLUME_SLIDE                    = 0x0A,
-    GO_TO_PATTERN                   = 0x0B,
+    POSITION_JUMP                   = 0x0B,
     RETRIG                          = 0x0C,
     PATTERN_BREAK                   = 0x0D,
     SET_SPEED_VALUE_2               = 0x0F,
@@ -208,8 +208,9 @@ struct PatternData {
 
 /// Check if a pattern element is empty. 
 /// @param [in] src Pattern data.
+/// @param [in] count Effect count.
 /// @return true if the pattern element is empty, false otherwise.
-bool isEmpty(PatternData const& src);
+bool isEmpty(PatternData const& src, unsigned int count);
 
 /// PCM sample.
 struct Sample {

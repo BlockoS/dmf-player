@@ -86,79 +86,94 @@ void SongPacker::packPatternMatrix(DMF::Song const& song) {
 
 void SongPacker::packPatternData(DMF::Song const& song) {
     _buffer.clear();
-    
+   
+    std::vector<uint8_t> jump_offsets;
+
     for(size_t i=0; i<song.infos.systemChanCount; i++) {
         for(size_t j=0; j<_matrix[i].dataOffset.size(); j++) {
-            size_t k = 0;
-            size_t l = _matrix[i].dataOffset[j];
+            jump_offsets.clear();
+           
+            size_t k;
+            size_t l;
+            for(k=0, l=_matrix[i].dataOffset[j]; k<song.infos.totalRowsPerPattern; k++, l++) {
+                const DMF::PatternData &pattern_data = song.patternData[l];
+                for(size_t t=0; t<DMF_MAX_EFFECT_COUNT; t++) {
+                    if(pattern_data.effect[t].code == DMF::POSITION_JUMP) {
+                        jump_offsets.push_back(k); 
+                    }
+                }
+            }
             
-            size_t rest;
-            
+            size_t rest = 0;
             _matrix[i].bufferOffset.push_back(_buffer.size());
             
-            for(rest=0; (k<song.infos.totalRowsPerPattern) && isEmpty(song.patternData[l]); k++, l++, rest++) {
-            }
-            
-            if(rest) {
-                if(rest >= 128) {
-                    _buffer.push_back(PCE::RestEx);
-                    _buffer.push_back(rest);
+            for(k=0, l=_matrix[i].dataOffset[j]; k<song.infos.totalRowsPerPattern; k++, l++) {
+                bool jump_destination = false;
+                for(size_t t=0; (t<jump_offsets.size()) && (!jump_destination); t++) {
+                    jump_destination = (k == jump_offsets[t]);
                 }
-                else {
-                    _buffer.push_back(PCE::Rest | rest);
+                
+                const DMF::PatternData &pattern_data = song.patternData[l];
+                if((!jump_destination) && DMF::isEmpty(pattern_data, song.effectCount[i])) {
+                    rest++;
+                    continue;
                 }
-            }
-            
-            while(k<song.infos.totalRowsPerPattern) {
-                if(song.patternData[l].note == 100) {
+                if(rest) {
+                    if(rest >= 128) {
+                        _buffer.push_back(PCE::RestEx);
+                        _buffer.push_back(rest);
+                    }
+                    else {
+                        _buffer.push_back(PCE::Rest | rest);
+                    }
+                    rest = 0;
+                }
+                   
+                if(pattern_data.note == 100) {
                     _buffer.push_back(PCE::NoteOff);
                 }
-                else if(song.patternData[l].note && song.patternData[l].octave) {
+                else if(pattern_data.note && pattern_data.octave) {
                     uint8_t dummy;
                     // Let's fix octave and notes...
-                    dummy  = (song.patternData[l].note % 12) & 0x0f;
-                    dummy |= ((song.patternData[l].octave + (dummy ? 1 : 2)) & 0x0f) << 4;
+                    dummy  = (pattern_data.note % 12) & 0x0f;
+                    dummy |= ((pattern_data.octave + (dummy ? 1 : 2)) & 0x0f) << 4;
                     _buffer.push_back(PCE::Note);
                     _buffer.push_back(dummy);
                 }
                 
-                if(song.patternData[l].volume != 0xffff) {
+                if(pattern_data.volume != 0xffff) {
                     _buffer.push_back(PCE::SetVolume);
-                    _buffer.push_back(song.patternData[l].volume * 4);
+                    _buffer.push_back(pattern_data.volume * 4);
                 }
                 
-                if(song.patternData[l].instrument != 0xffff) {
+                if(pattern_data.instrument != 0xffff) {
                     _buffer.push_back(PCE::SetInstrument);
-                    _buffer.push_back(song.patternData[l].instrument);
+                    _buffer.push_back(pattern_data.instrument);
                 }
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
-                    if((song.patternData[l].effect[m].code != 0xffff) && (song.patternData[l].effect[m].data != 0xffff)) {
-						uint8_t data;
-						data = song.patternData[l].effect[m].data;
-						// Preprocess / fix 
-						// [todo] make a shiny method to fix effects!
-						// - Volume slide
-                        if(song.patternData[l].effect[m].code == 0x0A) {
-							if(data > 0x0f) {	
-							    // Positive delta.
-								data >>= 4;
-							}
-							else {
+                    if((pattern_data.effect[m].code != 0xffff) && (pattern_data.effect[m].data != 0xffff)) {
+					    uint8_t data;
+					    data = pattern_data.effect[m].data;
+					    // Preprocess / fix 
+					    // [todo] make a shiny method to fix effects!
+					    // - Volume slide
+                        if(pattern_data.effect[m].code == 0x0A) {
+						    if(data > 0x0f) {	
+						        // Positive delta.
+							    data >>= 4;
+						    }
+						    else {
 							 	// Negative delta.
 								data = ((data & 0x0f) ^ 0xff) + 1;
 							}
 						}
-                        _buffer.push_back(song.patternData[l].effect[m].code);
+                        _buffer.push_back(pattern_data.effect[m].code);
                         _buffer.push_back(data);
                     }
-                }
-
-                k++;
-                l++;
-
-                for(rest=0; (k<song.infos.totalRowsPerPattern) && isEmpty(song.patternData[l]); k++, l++, rest++)
-                {}
+                } // effects
+            }    
+            if(rest) {
                 if(rest >= 128) {
                     _buffer.push_back(PCE::RestEx);
                     _buffer.push_back(rest);
@@ -169,12 +184,12 @@ void SongPacker::packPatternData(DMF::Song const& song) {
             }
         }
         _matrix[i].bufferOffset.push_back(_buffer.size());
-    }
+    } 
 }
 
 bool SongPacker::output(Writer& writer)
 {
-    if(!writer.write(_infos)) {
+    if(!writer.write(_infos, _instruments.count)) {
         // [todo] msg
         return false;
     }

@@ -39,7 +39,7 @@ void Writer::close() {
     }
 }
 
-bool Writer::write(DMF::Infos const& infos) {
+bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
     if(infos.name.length) {
         _prefix.assign(infos.name.data, infos.name.length);
         // Replace any invalid char by '_'.
@@ -50,29 +50,27 @@ bool Writer::write(DMF::Infos const& infos) {
         _prefix = "song";
     }
     
-    fprintf(_output, "%s.timeBase:      .db $%02x\n"
-                     "%s.timeTick:      .db $%02x, $%02x\n"
-                     "%s.patternRows:   .db $%02x\n"
-                     "%s.matrixRows:    .db $%02x\n"
+    fprintf(_output, "%s.timeBase:        .db $%02x\n"
+                     "%s.timeTick:        .db $%02x, $%02x\n"
+                     "%s.patternRows:     .db $%02x\n"
+                     "%s.matrixRows:      .db $%02x\n"
+                     "%s.instrumentCount: .db $%02x\n"
                      "%s.pointers:\n"
-                     "    .dw %s.wav.lo\n"
-                     "    .dw %s.wav.hi\n"
-                     "    .dw %s.pattern.lo\n"
-                     "    .dw %s.pattern.hi\n",
+                     "    .dw %s.wav\n"
+                     "    .dw %s.instruments\n"
+                     "    .dw %s.matrix\n"
+                     "    .dw %s.pattern\n",
                      _prefix.c_str(), infos.timeBase,
                      _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
                      _prefix.c_str(), infos.totalRowsPerPattern,
                      _prefix.c_str(), infos.totalRowsInPatternMatrix,
+                     _prefix.c_str(), (uint8_t)instrument_count,
                      _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str());
                      
-    for(unsigned int i=0; i<infos.systemChanCount; i++) {
-        fprintf(_output, "    .dw %s.matrix_%04x\n", _prefix.c_str(), i);
-    }
-    
     fprintf(_output, "%s.name:          .db \"%s\"\n"
                      "%s.author:        .db \"%s\"\n",
                      _prefix.c_str(), infos.name.data,
@@ -117,6 +115,7 @@ bool Writer::writePointerTable(const char* pointerBasename, size_t count, size_t
 
 bool Writer::write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern) {
     bool ret = true;
+    fprintf(_output, "%s.matrix:\n", _prefix.c_str());
     for(unsigned int j=0; ret && (j<infos.systemChanCount); j++) {
         fprintf(_output, "%s.matrix_%04x:\n", _prefix.c_str(), j);
         ret = writeBytes(&pattern[j*infos.totalRowsInPatternMatrix], infos.totalRowsInPatternMatrix, 16);
@@ -166,6 +165,7 @@ bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> c
         count += matrix[i].dataOffset.size();
     }
     if(ret) {
+        fprintf(_output, "%s.pattern:\n", _prefix.c_str());
         ret = writePointerTable("pattern", count, 4);
     }
     return ret;
@@ -173,18 +173,18 @@ bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> c
 
 bool Writer::writePatternData(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index) {
     bool ret = true;
-    for(size_t j=0; ret && (j<pattern.dataOffset.size()); j++) {
+    for(size_t j=0; ret && (j<pattern.bufferOffset.size()-1); j++) {
         fprintf(_output, "%s.pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
         int offset  = pattern.bufferOffset[j];
-        size_t size = pattern.bufferOffset[j+1] - pattern.bufferOffset[j];
+        size_t size = pattern.bufferOffset[j+1] - offset;
         ret = writeBytes(&buffer[offset], size, 16);
     }
     return ret;
 }
 
 bool Writer::write(std::vector<WaveTable> const& wavetable) {
-    bool ret;
-    ret = writePointerTable("wav", wavetable.size(), 4);
+    bool ret = true;
+    fprintf(_output, "%s.wav:\n", _prefix.c_str());
     for(size_t i=0; ret && (i<wavetable.size()); i++) {
         fprintf(_output, "%s.wav_%04lx:\n", _prefix.c_str(), i);
         ret = writeBytes(&wavetable[i][0], wavetable[i].size(), 16);

@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors.
+// Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors.
 // All rights reserved.
 // Copyrights licensed under the New BSD License. See the accompanying
 // LICENSE file for terms.
@@ -9,10 +9,8 @@
 
 #define MAX_CHAR_PER_LINE 92
 
-namespace PCE
-{
-    class Writer
-    {
+namespace PCE {
+    class Writer {
         public:
             Writer(std::string const& filename);
             ~Writer();
@@ -21,7 +19,7 @@ namespace PCE
             void close();
             
             // [todo] rename
-            bool write(DMF::Infos const& infos);
+            bool write(DMF::Infos const& infos, size_t instrument_count);
             bool write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern);
             bool write(std::vector<WaveTable> const& wavetable);
 
