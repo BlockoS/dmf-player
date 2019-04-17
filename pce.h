@@ -43,9 +43,10 @@ namespace PCE {
     };
     
     struct PatternMatrix {
-        std::vector<int> dataOffset;
-        std::vector<int> packedOffset;
+        std::vector<int> pattern;
+        std::vector<int> packed;
         std::vector<int> bufferOffset;
+        std::vector<uint8_t> buffer;
     };
 
     struct Envelope {
@@ -89,9 +90,7 @@ namespace PCE {
             DMF::Infos _infos;
             std::vector<WaveTable>     _waveTable;
             InstrumentList             _instruments;
-            std::vector<uint8_t>       _buffer;
             std::vector<PatternMatrix> _matrix;
-            std::vector<uint8_t>       _pattern;
     };
 }
 

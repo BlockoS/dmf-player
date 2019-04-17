@@ -18,8 +18,6 @@ SongPacker::~SongPacker()
 void SongPacker::pack(DMF::Song const& song) {
     memcpy(&_infos, &song.infos, sizeof(DMF::Infos));
     
-    _pattern.resize(song.patternMatrix.size());
-    
     _instruments.pack(song.instrument);
     
     _waveTable.resize(song.waveTable.size());
@@ -63,92 +61,71 @@ void InstrumentList::pack(std::vector<DMF::Instrument> const& src) {
 }
 
 void SongPacker::packPatternMatrix(DMF::Song const& song) {
+    std::vector<int> offsets;
     _matrix.resize(song.infos.systemChanCount);
-    size_t delta = 0;
     for(size_t j=0; j<song.infos.systemChanCount; j++) {
-        _matrix[j].dataOffset.clear();
-
-        _matrix[j].packedOffset.resize(song.infos.totalRowsInPatternMatrix);
-        std::fill(_matrix[j].packedOffset.begin(), _matrix[j].packedOffset.end(), -1);
-        
+        offsets.resize(song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
+        std::fill(offsets.begin(), offsets.end(), -1);
+    
         for(size_t i=0; i<song.infos.totalRowsInPatternMatrix; i++) {
-            size_t offset  = i + (j*song.infos.totalRowsInPatternMatrix);
-            size_t pattern = song.patternMatrix[offset];
-            if(_matrix[j].packedOffset[pattern] < 0) {
-                _matrix[j].packedOffset[pattern] = _matrix[j].dataOffset.size();
-                _matrix[j].dataOffset.push_back(offset * song.infos.totalRowsPerPattern);
+            size_t k  = i + (j*song.infos.totalRowsInPatternMatrix);
+            size_t pattern = song.patternMatrix[k];
+            if(offsets[pattern] < 0) {
+                offsets[pattern] = _matrix[j].packed.size();
+                _matrix[j].packed.push_back(pattern);
             }
-            _pattern[offset] = _matrix[j].packedOffset[pattern] + delta;
+            _matrix[j].pattern.push_back(offsets[pattern]); 
         }
-        delta += _matrix[j].dataOffset.size();
     }
 }
 
 void SongPacker::packPatternData(DMF::Song const& song) {
-    _buffer.clear();
-   
-    std::vector<uint8_t> jump_offsets;
-
     for(size_t i=0; i<song.infos.systemChanCount; i++) {
-        for(size_t j=0; j<_matrix[i].dataOffset.size(); j++) {
-            jump_offsets.clear();
+        _matrix[i].buffer.clear();
+        for(size_t j=0; j<_matrix[i].packed.size(); j++) {
            
-            size_t k;
-            size_t l;
-            for(k=0, l=_matrix[i].dataOffset[j]; k<song.infos.totalRowsPerPattern; k++, l++) {
-                const DMF::PatternData &pattern_data = song.patternData[l];
-                for(size_t t=0; t<DMF_MAX_EFFECT_COUNT; t++) {
-                    if(pattern_data.effect[t].code == DMF::POSITION_JUMP) {
-                        jump_offsets.push_back(k); 
-                    }
-                }
-            }
-            
+            size_t k, l;
+            size_t start = (i * song.infos.totalRowsInPatternMatrix + _matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
             size_t rest = 0;
-            _matrix[i].bufferOffset.push_back(_buffer.size());
+            _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
             
-            for(k=0, l=_matrix[i].dataOffset[j]; k<song.infos.totalRowsPerPattern; k++, l++) {
-                bool jump_destination = false;
-                for(size_t t=0; (t<jump_offsets.size()) && (!jump_destination); t++) {
-                    jump_destination = (k == jump_offsets[t]);
-                }
-                
+            for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
                 const DMF::PatternData &pattern_data = song.patternData[l];
-                if((!jump_destination) && DMF::isEmpty(pattern_data, song.effectCount[i])) {
+                if(DMF::isEmpty(pattern_data, song.effectCount[i])) {
                     rest++;
                     continue;
                 }
                 if(rest) {
                     if(rest >= 128) {
-                        _buffer.push_back(PCE::RestEx);
-                        _buffer.push_back(rest);
+                        _matrix[i].buffer.push_back(PCE::RestEx);
+                        _matrix[i].buffer.push_back(rest);
                     }
                     else {
-                        _buffer.push_back(PCE::Rest | rest);
+                        _matrix[i].buffer.push_back(PCE::Rest | rest);
                     }
                     rest = 0;
                 }
                    
                 if(pattern_data.note == 100) {
-                    _buffer.push_back(PCE::NoteOff);
+                    _matrix[i].buffer.push_back(PCE::NoteOff);
                 }
                 else if(pattern_data.note && pattern_data.octave) {
                     uint8_t dummy;
                     // Let's fix octave and notes...
                     dummy  = (pattern_data.note % 12) & 0x0f;
                     dummy |= ((pattern_data.octave + (dummy ? 1 : 2)) & 0x0f) << 4;
-                    _buffer.push_back(PCE::Note);
-                    _buffer.push_back(dummy);
+                    _matrix[i].buffer.push_back(PCE::Note);
+                    _matrix[i].buffer.push_back(dummy);
                 }
                 
                 if(pattern_data.volume != 0xffff) {
-                    _buffer.push_back(PCE::SetVolume);
-                    _buffer.push_back(pattern_data.volume * 4);
+                    _matrix[i].buffer.push_back(PCE::SetVolume);
+                    _matrix[i].buffer.push_back(pattern_data.volume * 4);
                 }
                 
                 if(pattern_data.instrument != 0xffff) {
-                    _buffer.push_back(PCE::SetInstrument);
-                    _buffer.push_back(pattern_data.instrument);
+                    _matrix[i].buffer.push_back(PCE::SetInstrument);
+                    _matrix[i].buffer.push_back(pattern_data.instrument);
                 }
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
@@ -168,22 +145,22 @@ void SongPacker::packPatternData(DMF::Song const& song) {
 								data = ((data & 0x0f) ^ 0xff) + 1;
 							}
 						}
-                        _buffer.push_back(pattern_data.effect[m].code);
-                        _buffer.push_back(data);
+                        _matrix[i].buffer.push_back(pattern_data.effect[m].code);
+                        _matrix[i].buffer.push_back(data);
                     }
                 } // effects
             }    
             if(rest) {
                 if(rest >= 128) {
-                    _buffer.push_back(PCE::RestEx);
-                    _buffer.push_back(rest);
+                    _matrix[i].buffer.push_back(PCE::RestEx);
+                    _matrix[i].buffer.push_back(rest);
                 }
                 else {
-                    _buffer.push_back(PCE::Rest | rest);
+                    _matrix[i].buffer.push_back(PCE::Rest | rest);
                 }
             }
         }
-        _matrix[i].bufferOffset.push_back(_buffer.size());
+        _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
     } 
 }
 
@@ -201,11 +178,7 @@ bool SongPacker::output(Writer& writer)
         // [todo] msg
         return false;
     }
-    if(!writer.write(_infos, _pattern)) {
-        // [todo] msg
-        return false;
-    }
-    if(!writer.writePatterns(_infos, _matrix, _buffer)) {
+    if(!writer.writePatterns(_infos, _matrix)) {
         // [todo] msg
         return false;
     }

@@ -10,7 +10,7 @@
 #include "pcewriter.h"
 
 namespace PCE {
-    
+
 Writer::Writer(std::string const& filename)
     : _filename(filename)
     , _prefix("")
@@ -58,8 +58,7 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
                      "%s.pointers:\n"
                      "    .dw %s.wav\n"
                      "    .dw %s.instruments\n"
-                     "    .dw %s.matrix\n"
-                     "    .dw %s.pattern\n",
+                     "    .dw %s.matrix\n",
                      _prefix.c_str(), infos.timeBase,
                      _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
                      _prefix.c_str(), infos.totalRowsPerPattern,
@@ -68,9 +67,8 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
                      _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),
-                     _prefix.c_str(),
                      _prefix.c_str());
-                     
+                    
     fprintf(_output, "%s.name:          .db \"%s\"\n"
                      "%s.author:        .db \"%s\"\n",
                      _prefix.c_str(), infos.name.data,
@@ -90,7 +88,7 @@ bool Writer::writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLi
     return true;
 }
 
-bool Writer::writePointerTable(const char* pointerBasename, size_t count, size_t elementsPerLine) {
+bool Writer::writePointerTable(const char* pointerBasename, size_t start, size_t count, size_t elementsPerLine) {
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "dwl", "dwh" };
     
@@ -106,7 +104,32 @@ bool Writer::writePointerTable(const char* pointerBasename, size_t count, size_t
             size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
             fprintf(_output, "    .%s ", op[p]);
             for(size_t j=0; j<last; j++, i++) {
-                fprintf(_output, "%s.%s_%04x%c", _prefix.c_str(), pointerBasename, static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
+                fprintf(_output, "%s.%s_%04x%c", _prefix.c_str(), pointerBasename, static_cast<uint32_t>(start+i), (j<(last-1))?',':'\n');
+            }
+        }
+    }
+    return true;
+}
+
+bool Writer::writePointerTable(const char* table, const char* element, const std::vector<int>& index, size_t elementsPerLine) {
+    static char const* postfix[] = { "lo", "hi" };
+    static char const* op[] = { "dwl", "dwh" };
+    
+    // Compute element char count and adjust elements per line.
+    size_t elementCharLen = _prefix.size() + strlen(element) + 8;
+    if((elementCharLen*elementsPerLine) >= MAX_CHAR_PER_LINE) {
+		elementsPerLine = MAX_CHAR_PER_LINE / elementCharLen;
+	}
+    
+    size_t count = index.size();
+
+    for(int p=0; p<2; p++) {
+        fprintf(_output, "%s.%s.%s:\n", _prefix.c_str(), table, postfix[p]);
+        for(size_t i=0; i<count;) {
+            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            fprintf(_output, "    .%s ", op[p]);
+            for(size_t j=0; j<last; j++, i++) {
+                fprintf(_output, "%s.%s_%04x%c", _prefix.c_str(), element, index[i], (j<(last-1))?',':'\n');
             }
         }
     }
@@ -140,7 +163,7 @@ bool Writer::writeInstruments(InstrumentList const& instruments) {
             if(ret) {
                 fprintf(_output, "%s.%s.loop:\n", _prefix.c_str(), buffer);
                 ret = ret && writeBytes(&instruments.env[i].loop[0], instruments.count, 16);
-                ret = ret && writePointerTable(buffer, instruments.count, 8);
+                ret = ret && writePointerTable(buffer, 0, instruments.count, 8);
             }
         }
     }
@@ -157,27 +180,41 @@ bool Writer::writeInstruments(InstrumentList const& instruments) {
     return ret;
 }
 
-bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix, std::vector<uint8_t> const& buffer) {
+bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix) {
     bool ret = true;
-    size_t count = 0;
+    size_t index;    
+    fprintf(_output, "%s.matrix:\n", _prefix.c_str());
+    index = 0;
+
+    char name[256];
+
+    std::vector<int> pattern_index;
     for(size_t i=0; ret && (i<infos.systemChanCount); i++) {
-        ret = writePatternData(matrix[i], buffer, count);
-        count += matrix[i].dataOffset.size();
+        pattern_index.resize(matrix[i].pattern.size());
+        for(size_t j=0; j<matrix[i].pattern.size(); j++) {
+            pattern_index[j] = index + matrix[i].pattern[j];
+        }
+        snprintf(name, 256, "%s.matrix_%04x", _prefix.c_str(), static_cast<uint32_t>(i));
+        if(!writePointerTable(name, "pattern", pattern_index, 16)) {
+            return false;
+        }
+        index += matrix[i].packed.size();
     }
-    if(ret) {
-        fprintf(_output, "%s.pattern:\n", _prefix.c_str());
-        ret = writePointerTable("pattern", count, 4);
-    }
+
+    index = 0;
+    for(size_t i=0; ret && (i<infos.systemChanCount); i++) {
+        ret = writePatternData(matrix[i], index);
+    } 
     return ret;
 }
 
-bool Writer::writePatternData(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index) {
+bool Writer::writePatternData(PCE::PatternMatrix const& pattern, size_t& index) {
     bool ret = true;
     for(size_t j=0; ret && (j<pattern.bufferOffset.size()-1); j++) {
         fprintf(_output, "%s.pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
         int offset  = pattern.bufferOffset[j];
         size_t size = pattern.bufferOffset[j+1] - offset;
-        ret = writeBytes(&buffer[offset], size, 16);
+        ret = writeBytes(&pattern.buffer[offset], size, 16);
     }
     return ret;
 }

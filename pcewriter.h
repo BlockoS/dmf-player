@@ -23,20 +23,34 @@ namespace PCE {
             bool write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern);
             bool write(std::vector<WaveTable> const& wavetable);
 
-            bool writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix, std::vector<uint8_t> const& buffer);
+            bool writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix);
             bool writeInstruments(InstrumentList const& instruments);
 
         private:
             bool writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLine);
-            bool writePointerTable(const char* pointerBasename, size_t count, size_t elementsPerLine);
+            bool writePointerTable(const char* pointerBasename, size_t start, size_t count, size_t elementsPerLine);
+            bool writePointerTable(const char* table, const char* element, const std::vector<int>& index, size_t elementsPerLine);
 
-            bool writePatternData(PCE::PatternMatrix const& pattern, std::vector<uint8_t> const& buffer, size_t index);
-            
+            bool writePatternData(PCE::PatternMatrix const& pattern, size_t& index);
+            template <typename T>
+            void writeBuffer(std::vector<T> const& buffer, size_t elementsPerLine);
+        
         private:
             std::string _filename;
             std::string _prefix;
             FILE       *_output;
     };
-}
 
+    template <typename T>
+    void Writer::writeBuffer(std::vector<T> const& buffer, size_t elementsPerLine) {
+        for(size_t i=0; i<buffer.size(); ) {
+            size_t last = ((elementsPerLine+i)<buffer.size()) ? elementsPerLine : (buffer.size()-i);
+            fprintf(_output, "    .db ");
+            for(size_t j=0; j<last; j++, i++) {
+                fprintf(_output,"$%02x%c", buffer[i], ((j+1) < last) ? ',' : '\n');
+            }
+        }
+    }
+
+}
 #endif // PCE_WRITER_H

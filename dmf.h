@@ -246,8 +246,6 @@ struct Song {
     std::vector<Sample> sample;
 };
 
-void printInfos(Infos const& nfo);
-
 } // DMF
 
 #endif // DMF_H
