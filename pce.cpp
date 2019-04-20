@@ -80,6 +80,7 @@ void SongPacker::packPatternMatrix(DMF::Song const& song) {
 }
 
 void SongPacker::packPatternData(DMF::Song const& song) {
+// [todo] record pattern break
     for(size_t i=0; i<song.infos.systemChanCount; i++) {
         _matrix[i].buffer.clear();
         for(size_t j=0; j<_matrix[i].packed.size(); j++) {
@@ -88,24 +89,26 @@ void SongPacker::packPatternData(DMF::Song const& song) {
             size_t start = (i * song.infos.totalRowsInPatternMatrix + _matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
             size_t rest = 0;
             _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
-            
+           
+            size_t last = 0;
+
             for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
                 const DMF::PatternData &pattern_data = song.patternData[l];
                 if(DMF::isEmpty(pattern_data, song.effectCount[i])) {
                     rest++;
                     continue;
                 }
-                if(rest) {
-                    if(rest >= 128) {
-                        _matrix[i].buffer.push_back(PCE::RestEx);
-                        _matrix[i].buffer.push_back(rest);
-                    }
-                    else {
-                        _matrix[i].buffer.push_back(PCE::Rest | rest);
-                    }
-                    rest = 0;
+                last = _matrix[i].buffer.size();
+                for(; rest >= 64; rest -= (rest >= 256) ? 256 : rest) {
+                    _matrix[i].buffer.push_back(PCE::RestEx);
+                    _matrix[i].buffer.push_back(rest % 256);
                 }
+                if(rest) {
+                    _matrix[i].buffer.push_back(PCE::Rest | rest);
+                }
+                rest = 0;
                    
+                last = _matrix[i].buffer.size();
                 if(pattern_data.note == 100) {
                     _matrix[i].buffer.push_back(PCE::NoteOff);
                 }
@@ -119,11 +122,13 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                 }
                 
                 if(pattern_data.volume != 0xffff) {
+                    last = _matrix[i].buffer.size();
                     _matrix[i].buffer.push_back(PCE::SetVolume);
                     _matrix[i].buffer.push_back(pattern_data.volume * 4);
                 }
                 
                 if(pattern_data.instrument != 0xffff) {
+                    last = _matrix[i].buffer.size();
                     _matrix[i].buffer.push_back(PCE::SetInstrument);
                     _matrix[i].buffer.push_back(pattern_data.instrument);
                 }
@@ -145,20 +150,21 @@ void SongPacker::packPatternData(DMF::Song const& song) {
 								data = ((data & 0x0f) ^ 0xff) + 1;
 							}
 						}
+                        last = _matrix[i].buffer.size();
                         _matrix[i].buffer.push_back(pattern_data.effect[m].code);
                         _matrix[i].buffer.push_back(data);
                     }
                 } // effects
-            }    
-            if(rest) {
-                if(rest >= 128) {
-                    _matrix[i].buffer.push_back(PCE::RestEx);
-                    _matrix[i].buffer.push_back(rest);
-                }
-                else {
-                    _matrix[i].buffer.push_back(PCE::Rest | rest);
-                }
+                _matrix[i].buffer[last] |= 0x80;
             }
+            for(; rest >= 64; rest -= (rest >= 256) ? 256 : rest) {
+                _matrix[i].buffer.push_back(PCE::RestEx);
+                _matrix[i].buffer.push_back(rest % 256);
+            }
+            if(rest) {
+                _matrix[i].buffer.push_back(PCE::Rest | rest);
+            }
+            _matrix[i].buffer.push_back(PCE::EndOfTrack);
         }
         _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
     } 

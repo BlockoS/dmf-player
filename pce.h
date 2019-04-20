@@ -38,8 +38,9 @@ namespace PCE {
         SetInstrument,
         Note,                       // Set note+octave
         NoteOff,
-        RestEx             = 0x79, // For values >= 128
-        Rest               = 0x80  // For values between 0 and 127
+        RestEx             = 0x3f, // For values >= 64
+        Rest               = 0x40, // For values between 0 and 63
+        EndOfTrack         = 0xff
     };
     
     struct PatternMatrix {

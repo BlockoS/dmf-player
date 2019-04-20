@@ -59,136 +59,63 @@ PSG_CTRL_FULL_VOLUME    .equ %0011_1111 ; channel maximum volume (bit 5 is unuse
 PSG_VOLUME_MAX = $1f ; Maximum volume value
 
     .zp
-_si         .ds 2               ; [todo] review usage
+_si         .ds 2
 _vdc_reg    .ds 1
-_vdc_crl    .ds 1
+_vdc_ctrl   .ds 1
+_vsync_cnt  .ds 1
 
-; player specific variables
-_tmp                .ds 1
-_ptr                .ds 2
-_current_row        .ds 1
-_current_time_base  .ds 1
-_current_time_tick  .ds 1
-
-_pattern_rows       .ds 1
-_matrix_index       .ds 1
-_matrix_rows        .ds 1
-_arpeggio_speed     .ds 1
-
-_tone               .ds PSG_CHAN_COUNT
-_volume             .ds PSG_CHAN_COUNT
-_frequency.lo       .ds PSG_CHAN_COUNT
-_frequency.hi       .ds PSG_CHAN_COUNT
-_state              .ds PSG_CHAN_COUNT
-_update             .ds 1
-
-_wave_table_ptr.lo  .ds 2
-_wave_table_ptr.hi  .ds 2
-
-_pattern_ptr_table.lo .ds 2
-_pattern_ptr_table.hi .ds 2
-
-_matrix_ptr:
-_matrix_ptr_ch0     .ds 2
-_matrix_ptr_ch1     .ds 2
-_matrix_ptr_ch2     .ds 2
-_matrix_ptr_ch3     .ds 2
-_matrix_ptr_ch4     .ds 2
-_matrix_ptr_ch5     .ds 2
-
-_fx_volume_delta    .ds PSG_CHAN_COUNT
-_fx_tone_delta      .ds PSG_CHAN_COUNT
-
-_arpeggio_ptr.lo    .ds PSG_CHAN_COUNT
-_arpeggio_ptr.hi    .ds PSG_CHAN_COUNT
+player:
+player.time_base         .ds 1
+player.time_tick         .ds 2
+player.pattern_rows      .ds 1
+player.matrix_rows       .ds 1
+player.instrument_count  .ds 1
+player.wav               .ds 2
+player.instruments       .ds 2
+player.matrix            .ds 2
+player.matrix_pos        .ds 1
+player.chn               .ds 1
+player.pattern.lo        .ds PSG_CHAN_COUNT
+player.pattern.hi        .ds PSG_CHAN_COUNT
+player.pattern_pos       .ds 1
+player.ptr               .ds 2
+player.current_time_tick .ds 2
+player.rest              .ds PSG_CHAN_COUNT 
 
 	.bss
-_time_base          .ds 1
-_time_tick          .ds 2
-
-_pattern_ptr.lo     .ds PSG_CHAN_COUNT
-_pattern_ptr.hi     .ds PSG_CHAN_COUNT
-
-_delay              .ds PSG_CHAN_COUNT
-
-_volume.base        .ds PSG_CHAN_COUNT
-
-_inst.arpeggio.index .ds PSG_CHAN_COUNT
-_inst.arpeggio.lo    .ds PSG_CHAN_COUNT
-_inst.arpeggio.hi    .ds PSG_CHAN_COUNT
-_inst.arpeggio.size  .ds PSG_CHAN_COUNT
-_inst.arpeggio.loop  .ds PSG_CHAN_COUNT
-; [todo] instrument arpeggio mode
-
-_inst.volume.index  .ds PSG_CHAN_COUNT
-_inst.volume.lo     .ds PSG_CHAN_COUNT
-_inst.volume.hi     .ds PSG_CHAN_COUNT
-_inst.volume.size   .ds PSG_CHAN_COUNT
-_inst.volume.loop   .ds PSG_CHAN_COUNT
-
-; [todo] instrument wave
-
-_wave_copy          .ds 1 ; tin
-_wave_copy_src      .ds 2
-_wave_copy_dst      .ds 2
-_wave_copy_len      .ds 2
-_wave_copy_rts      .ds 1 ; rts
-
-
-_fixed_arpeggio     .ds PSG_CHAN_COUNT*4
-
 ;;---------------------------------------------------------------------
 ; Song effects.
 Arpeggio           = $00
-PortamentoUp       = $01
-PortamentoDown     = $02
-PortamentoToNote   = $03
-Vibrato            = $04
-PortToNoteVolSlide = $05
-VibratoVolSlide    = $06
-Tremolo            = $07
-Panning            = $08
-SetSpeedValue1     = $09
-VolumeSlide        = $0a
-PositionJump       = $0b
-Retrig             = $0c
-PatternBreak       = $0d
-ExtendedCommands   = $0e
-SetSpeedValue2     = $0f
-SetWave            = $10
-EnableNoiseChannel = $11
-SetLFOMode         = $12
-SetLFOSpeed        = $13
+ArpeggioSpeed      = $01
+PortamentoUp       = $02
+PortamentoDown     = $03
+PortamentoToNote   = $04
+Vibrato            = $05
+VibratoMode        = $06
+VibratoDepth       = $07
+PortToNoteVolSlide = $08
+VibratoVolSlide    = $09
+Tremolo            = $0a
+Panning            = $0b
+SetSpeedValue1     = $0c
+VolumeSlide        = $0d
+PositionJump       = $0e
+Retrig             = $0f
+PatternBreak       = $10
+ExtendedCommands   = $11
+SetSpeedValue2     = $12
+SetWave            = $13
+EnableNoiseChannel = $14
+SetLFOMode         = $15
+SetLFOSpeed        = $16
 EnableSampleOutput = $17
-SetVolume          = $1a
-SetInstrument      = $1b
-Note               = $20 ; Set note+octave
-NoteOff            = $21
+SetVolume          = $18
+SetInstrument      = $19
+Note               = $1a ; Set note+octave
+NoteOff            = $1b
 RestEx             = $79 ; For values >= 128
 Rest               = $80 ; For values between 0 and 127
-
 ;;---------------------------------------------------------------------
-;
-;;---------------------------------------------------------------------
-PlayerStateInactive        = %00000000
-PlayerStateUpdateNote      = %00000001
-PlayerStateUpdateFrequency = %00000010
-PlayerStateVolume          = %00000100
-
-;;---------------------------------------------------------------------
-; name : get_next_pattern
-; desc : Get pattern index from matrix and setup pattern pointer.
-; in   : \1 Channel index
-;;---------------------------------------------------------------------
-    .macro get_next_pattern
-    ldy    _matrix_index
-    lda    [_matrix_ptr+(\1<<1)], Y
-    tay
-    lda    [_pattern_ptr_table.lo], Y
-    sta    _pattern_ptr.lo+\1
-    lda    [_pattern_ptr_table.hi], Y
-    sta    _pattern_ptr.hi+\1
-    .endm
 
 ;----------------------------------------------------------------------
 ; Vector table
@@ -224,8 +151,7 @@ irq_1:
     lda    video_reg             ; get VDC status register
     and    #%0010_0000
     beq    .no_vsync
-        jsr    update_song
-		
+	    inc    <_vsync_cnt	
 .no_vsync:
     stz    video_reg
     rti
@@ -310,7 +236,7 @@ irq_reset:
     st0    #5
     ; enable bg, enable sprite, vertical blanking and scanline interrupt
     lda    #%11001100
-    sta    <_vdc_crl
+    sta    <_vdc_ctrl
     sta    video_data_l
     st2    #$00
 
@@ -325,9 +251,8 @@ irq_reset:
     cpx    #PSG_CHAN_COUNT
     bne    .l1
 
-    lda    #$01
-    tam    #2
-
+    lda    #bank(song)
+    tam    #page(song)
     lda    #low(song)
     sta    <_si
     lda    #high(song)
@@ -337,12 +262,15 @@ irq_reset:
     cli
 
 .loop:
+    stz    <_vsync_cnt
+@wait_vsync:
+    lda    <_vsync_cnt
+    beq    @wait_vsync
+
+    jsr    update_song
+
     bra    .loop
 
-    nop
-    nop
-    nop
-    nop
 
 ;;---------------------------------------------------------------------
 ; name : load_song
@@ -351,739 +279,246 @@ irq_reset:
 ; out  : 
 ;;---------------------------------------------------------------------
 load_song:
-    ; setup wave copy
-    lda    #$d3                 ; tin
-    sta    _wave_copy
-    lda    #32
-    sta    _wave_copy_len
-    stz    _wave_copy_len+1
-    lda    #$60                 ; rts
-    sta    _wave_copy_rts
-    lda    #low(psg_wavebuf)
-    sta    _wave_copy_dst
-    lda    #high(psg_wavebuf)
-    sta    _wave_copy_dst+1
-    
-    ; load time infos and reset current time base and tick
     cly
+@copy_header:
     lda    [_si], Y
+    sta    player, Y
     iny
-    sta    _time_base
-    sta    <_current_time_base
-
-    lda    [_si], Y
-    iny
-    sta    _time_tick
-    sta    <_current_time_tick
-    lda    [_si], Y
-    iny
-    sta    _time_tick+1
+    cpy    #12
+    bne    @copy_header
     
+    lda    <player.matrix
+    sta    <_si
     
-    ; load pattern and matrix row count
-    lda    [_si], Y
-    iny
-    sta    _pattern_rows
-    stz    _current_row
-    lda    [_si], Y
-    iny
-    sta    _matrix_rows
-    stz    _matrix_index
-    
-    ; load arpeggio speed
-    lda    [_si], Y
-    iny
-    sta    _arpeggio_speed
+    lda    <player.matrix+1
+    sta    <_si+1
 
-    ; setup pointers
-    lda    [_si], Y
-    iny
-    sta    <_wave_table_ptr.lo
-    lda    [_si], Y
-    iny
-    sta    <_wave_table_ptr.lo+1
-    lda    [_si], Y
-    iny
-    sta    <_wave_table_ptr.hi
-    lda    [_si], Y
-    iny
-    sta    <_wave_table_ptr.hi+1
-
-    ; load pattern table pointer
-    lda    [_si], Y
-    iny
-    sta    <_pattern_ptr_table.lo
-    lda    [_si], Y
-    iny
-    sta    <_pattern_ptr_table.lo+1
-    lda    [_si], Y
-    iny
-    sta    <_pattern_ptr_table.hi
-    lda    [_si], Y
-    iny
-    sta    <_pattern_ptr_table.hi+1
-
-    ; load matrix pointers
     clx
-.l0:
-    lda    [_si],Y
-    iny
-    sta    _matrix_ptr,X
-    inx
-    cpx    #(PSG_CHAN_COUNT*2)
-    bne    .l0
-    
-    lda #$ff
-    sta psg_mainvol
- 
-    clx
-.l1:
-    ; reset delay
-    stz    _delay, X
+@set_pattern_ptr:
+    lda    [_si] 
+    sta    <player.pattern.lo, X
 
-    stx    psg_ch
-    stz    psg_ctrl
+    lda    <_si
+    clc
+    adc    <player.matrix_rows
+    sta    <_si
+    lda    <_si+1
+    adc    #$00
+    sta    <_si+1
 
-    lda    #$ff
-    sta    psg_pan
+    lda    [_si] 
+    sta    <player.pattern.hi, X
 
-    lda    #$7c    
-    sta    _volume.base, X
+    lda    <_si
+    clc
+    adc    <player.matrix_rows
+    sta    <_si
+    lda    <_si+1
+    adc    #$00
+    sta    <_si+1
+
+    stz    <player.pattern_pos
     
     inx
     cpx    #PSG_CHAN_COUNT
-    bne    .l1
+    bne    @set_pattern_ptr
 
-    get_next_pattern 0
-    get_next_pattern 1
-    get_next_pattern 2
-    get_next_pattern 3
-    get_next_pattern 4
-    get_next_pattern 5
+    stz    <player.current_time_tick
+    stz    <player.current_time_tick+1
 
     rts
 
 ;;---------------------------------------------------------------------
-; name : update_song
+; name : 
 ; desc : 
 ; in   : 
 ; out  : 
 ;;---------------------------------------------------------------------
-update_song:
-    dec    <_current_time_base
-    bmi    .reset_time_base
-        jmp    update_states
-        
-.reset_time_base:
-    lda    _time_base
-    sta    <_current_time_base
-    
-    dec    <_current_time_tick
-    beq    .update_internal
-        jmp    update_states
-        
-.update_internal:
-    lda    <_current_row
-    inc    <_current_row
-    and    #$01
-    tax
-    lda    _time_tick, X
-    sta    <_current_time_tick
-
-    ; Load note, effects, delay for each channel
-    clx
-_update_song_load:
-    lda    _delay, X
-    beq    _update_song_load_start
-        dec    _delay, X
-        bra    _update_song_next_chan
-        
-_update_song_load_start:
-    stx    psg_ch
-
-    lda    _pattern_ptr.lo, X
-    sta    <_si
-    lda    _pattern_ptr.hi, X
-    sta    <_si+1
-    
-    ; Loop until we hit one of the rest effects
+fetch_pattern:
     cly
-_update_song_load_loop:
-    lda    [_si], Y
+@loop:    
+    lda   [player.ptr], Y
     iny
-    cmp    #RestEx
-    bcs    .delay
-        asl    A
-        phx
-        sax
-        jmp    [fx_load_table, X]
-.delay:
-    beq    .extended_delay
-        and    #$7f
-        bra    .store_delay
-.extended_delay:
-        lda    [_si], Y
+
+    cmp   #$ff
+    bne   @check_rest
+        sec
+        rts
+@check_rest:
+    cmp   #$3f
+    bcc  @fetch_pattern_data
+    beq  @rest_ex
+@rest_std:
+        and    #$3f
+        bra    @rest_store
+@rest_ex:
+        lda    [player.ptr], Y
         iny
-.store_delay:
-    sta    _delay, X
+@rest_store:
+        ldx    <player.chn
+        sta    <player.rest, X
+        bra    @inc_ptr
+
+@fetch_pattern_data
+    pha 
     
-    ; Move pattern pointer to the next entry
+    asl   A
+    tax
+
+    jsr   fetch_pattern_data
+
+    pla 
+    bpl    @loop
+
+@inc_ptr:
     tya
     clc
-    adc    _pattern_ptr.lo, X
-    sta    _pattern_ptr.lo, X
-	bcc    .l2
-        inc    _pattern_ptr.hi, X
-.l2:
-
-_update_song_next_chan:
-    inx
-    cpx    #PSG_CHAN_COUNT
-    bne    _update_song_load
-
-_update_song_pattern_index:
-    lda    <_current_row
-    cmp    _pattern_rows
-    bne    .continue
-.fetch_next_pattern:
-        stz    <_current_row
-
-        inc    _matrix_index
-        lda    _matrix_index
-        cmp    _matrix_rows
-        bne    .update_patterns
-            ; [todo] reset stuffs just as load_song
-            stz    _matrix_index
-.update_patterns:
-        get_next_pattern 0
-        get_next_pattern 1
-        get_next_pattern 2
-        get_next_pattern 3
-        get_next_pattern 4
-        get_next_pattern 5
-.continue:
-
-update_states:
-
-    ldx    #(PSG_CHAN_COUNT-1)
-.start:
-    lda    <_state, X
-    sta    <_tmp
-
-    bbr0   <_tmp, .todo
-.inst_volume:
-    lda    _inst.volume.index, X
-    cmp    _inst.volume.size, X
-    bne    @l1
-        lda    _inst.volume.loop, X
-        cmp    #$ff
-        bne    @l2
-            rmb0   <_tmp
-            stz    <_volume, X
-            bra    .todo
-@l2:
-        sta    _inst.volume.index, X
-@l1:
-    tay
+    adc    <player.ptr
+    sta    <player.ptr
+    cla
+    adc    <player.ptr+1
+    sta    <player.ptr+1
     
-    lda    _inst.volume.lo, X
-    sta    <_ptr
-    lda    _inst.volume.hi, X
-    sta    <_ptr+1
-    
-    lda    [_ptr], Y
-    cmp    _volume.base, X
-    bcs    @skip
-        lda    _volume.base, X    
-@skip:
-    sta    <_volume, X
-    inc    _inst.volume.index, X    
-.todo:
-
-    lda    <_tmp
-    sta    <_state, X
-
-    stx    psg_ch
-    
-.volume:
-	lda    <_fx_volume_delta, X
-	clc
-	adc    <_volume, X
-	bpl    .no_reset.0
-		cla
-.no_reset.0:
-	cmp    #$7c
-	bcc    .no_clamp.0
-		lda    #$7c
-.no_clamp.0:
-    sta    <_volume, X
-    lsr    A
-    lsr    A
-	ora    #%10_0_00000
-	sta    psg_ctrl
-    
-.end:
-
-    dex
-    bpl    .start
-    ; [todo]
-    
+    clc
     rts
 
-;;---------------------------------------------------------------------
-; name : load_arpeggio
-; desc : .
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_arpeggio:
-    pla
-	pha
-	asl    A
-    asl    A
-	tax
+fetch_pattern_data:
+    jmp    [pattern_data_func, X]
 
-    lda    [_si], Y
-	and    #$0f
-	sta    _fixed_arpeggio+1, X
-	
-    lda    [_si], Y
-	iny
-	lsr    A
-	lsr    A
-	lsr    A
-	lsr    A
-	sta    _fixed_arpeggio+2, X
+pattern_data_func:
+    .dw arpeggio
+    .dw arpeggio_speed
+    .dw portamento_up
+    .dw portamento_down
+    .dw portamento_to_note
+    .dw vibrato
+    .dw vibrato_mode
+    .dw vibrato_depth
+    .dw port_to_note_vol_slide
+    .dw vibrato_vol_slide
+    .dw tremolo
+    .dw panning
+    .dw set_speed_value1
+    .dw volume_slide
+    .dw position_jump
+    .dw retrig
+    .dw pattern_break
+    .dw extended_commands
+    .dw set_speed_value2
+    .dw set_wav
+    .dw enable_noise_channel
+    .dw set_LFO_mode
+    .dw set_LFO_speed
+    .dw enable_sample_output
+    .dw set_volume
+    .dw set_instrument
+    .dw note_on
+    .dw note_off
 
-	txa
-	clc
-	adc    #low(_fixed_arpeggio)
-	plx
-	sta    <_arpeggio_ptr.lo, X
-	lda    #high(_fixed_arpeggio)
-	adc    #$00
-	sta    <_arpeggio_ptr.hi, X 
-
-    jmp    _update_song_load_loop
-
-load_portamento_up:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_portamento_down:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_portamento_to_note:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_vibrato:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_port_to_note_vol_slide:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_vibrato_vol_slide:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_tremolo:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_panning:
-    lda    [_si], Y
-    iny
-    
-	sta    psg_pan
-	; [todo] save copy
-
-    plx
-    jmp    _update_song_load_loop
-
-load_set_speed_value1:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_volume_slide
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_volume_slide:
-    lda    [_si], Y
-    iny	
-    plx
-    sta    <_fx_volume_delta, X  
-    jmp    _update_song_load_loop
-
-load_position_jump:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_retrig:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_pattern_break
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_pattern_break:
-    lda    [_si], Y
-    iny
-    plx
-
-    ; [todo] add a flag that'll perform break at the end of the update
-
-    sta    <_current_row
-
-    lda    #$01
-    sta    <_current_time_tick
-    
-
-    ldx    #(PSG_CHAN_COUNT-1)
-@l0:
-    stz    _delay, X
-    dex
-    bpl    @l0
-    
-    inc    _matrix_index
-    lda    _matrix_index
-    cmp    _matrix_rows
-    bne    .update_patterns
-        ; [todo] reset stuffs just as load_song
-        stz    _matrix_index
-.update_patterns:
-    get_next_pattern 0
-    get_next_pattern 1
-    get_next_pattern 2
-    get_next_pattern 3
-    get_next_pattern 4
-    get_next_pattern 5
-
-    jmp    update_song
-
-load_extended_commands:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_set_speed_value2:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_set_wave
-; desc : Load waveform buffer.
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_set_wave:
-    ; Load wave index.
-    lda    [_si], Y
-    iny
-    phy
-    
-    ; A contains the index of the wave table to be loaded.
-    tay
-    lda    [_wave_table_ptr.lo], Y
-    sta    _wave_copy_src
-    lda    [_wave_table_ptr.hi], Y
-    sta    _wave_copy_src+1
-    
-    ; Reset write index
-    lda    #%01_0_00000
-    sta    psg_ctrl
-
-    ; Enable write buffer
-    stz    psg_ctrl
-    
-    ; Copy wave buffer
-    jsr    _wave_copy
-
-    lda    #%01_0_00000
-    sta    psg_ctrl
-
-    ply
-    plx
-
-    ; Restore channel volume
-    lda    <_volume, X
-    lsr    A
-    lsr    A
-    ora    #%10_0_00000
-    sta    psg_ctrl
-    
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_enable_noise_channel
-; desc :
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_enable_noise_channel:
-    lda    [_si], Y
-    and    #$1f
+; [todo] params 
+update_chan:
+    lda    <player.current_time_tick
     beq    @l0
-        lda    #$bf                                 ; [todo] compute frequency
+        dec    <player.current_time_tick
+        rts
 @l0:
-    iny
-    plx
+    lda    <player.time_base
+    sta    <player.current_time_tick
 
-    cpx    #$04 
-    bcc    @l1
-        sta    psg_noise
-
-        lda    <_volume, X
-        lsr    A
-        lsr    A
-        ora    #%10_0_00000
-        sta    psg_ctrl
-
-        bne    @l1
-        
+    inc    <player.pattern_pos
+    
+    lda    <player.current_time_tick+1
+    beq    @l1
+        dec    <player.current_time_tick+1
+        rts
 @l1:
-    jmp    _update_song_load_loop
+    lda    <player.pattern_pos
+    and    #$01
+    tax
+    lda    <player.time_tick, X
+    sta    <player.current_time_tick+1
 
-load_set_LFO_mode:
-    lda    [_si], Y
+    ldx    <player.chn
+    lda    <player.rest, X
+    bne    @dec_rest
+        lda    <player.pattern.lo, X
+        sta    <player.ptr
+        lda    <player.pattern.hi, X 
+        sta    <player.ptr+1
+        jsr    fetch_pattern
+        ; [todo] carry set => inc matrix_index, fetch pattern pointer
+        bcc    @test_todo
+@l2:        bra    @l2
+@test_todo:
+
+        lda    <player.ptr
+        sta    <player.pattern.lo, X
+        lda    <player.ptr+1
+        sta    <player.pattern.hi, X 
+        rts
+@dec_rest:
+    dec    <player.rest, X
+@end:
+    rts
+
+update_song:
+    clx
+@loop:
+    phx
+    stx    <player.chn
+    jsr    update_chan
+;[todo] update_chan
+;[todo] update_note_fx
+    plx
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    @loop
+
+    rts
+
+; [todo] load data
+arpeggio:
+arpeggio_speed:
+portamento_up:
+portamento_down:
+portamento_to_note:
+vibrato:
+vibrato_mode:
+vibrato_depth:
+port_to_note_vol_slide:
+vibrato_vol_slide:
+tremolo:
+panning:
+set_speed_value1:
+volume_slide:
+position_jump:
+retrig:
+pattern_break:
+extended_commands:
+set_speed_value2:
+set_wav:
+enable_noise_channel:
+set_LFO_mode:
+set_LFO_speed:
+enable_sample_output:
+set_volume:
+set_instrument:
+note_on:
+    lda    [player.ptr], Y
     iny
     ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-load_set_LFO_speed:
-    lda    [_si], Y
-    iny
+    rts
+note_off:
     ; [todo]
-    plx
-    jmp    _update_song_load_loop
+    rts
 
-load_enable_sample_output:
-    lda    [_si], Y
-    iny
-    ; [todo]
-    plx
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_set_volume
-; desc : Reset current volume.
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_set_volume:
-	; Load byte.
-    lda    [_si], Y
-    iny
-
-    plx
-    sta    <_volume, X    
-    sta    _volume.base, X
-    
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_set_instrument
-; desc : Set current instrument.
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_set_instrument:
-    ; Load instrument index
-    lda    [_si], Y
-    iny
-    
-    plx
-    phy
-    
-    tay
-
-    lda    <_state, X
-    and    #%111111_00                                                 ; [todo] bitmask
-    sta    <_tmp
-
-    stz   _inst.volume.index, X
-    stz   _inst.arpeggio.index, X
-
-    ; Setup volume and arpeggio pointers
-    lda    song.instruments.volume.size, Y
-    sta    _inst.volume.size, X
-    bne    .l0
-        rmb0   <_tmp
-        bra    .load_arpeggio    
-.l0:
-    smb0   <_tmp
-    lda    song.instruments.volume.loop, Y
-    sta    _inst.volume.loop, X
-    lda    song.instruments.volume.lo, Y
-    sta    _inst.volume.lo, X
-    lda    song.instruments.volume.hi, Y
-    sta    _inst.volume.hi, X
-
-.load_arpeggio
-    lda    song.instruments.arpeggio.size, Y
-    sta    _inst.arpeggio.size, X
-    bne    .l1
-        rmb1   <_tmp
-        bra    .load_wav
-.l1:
-    smb1   <_tmp
-    lda    song.instruments.arpeggio.loop, Y
-    sta    _inst.arpeggio.loop, X
-    lda    song.instruments.arpeggio.lo, Y
-    sta    _inst.arpeggio.lo, X
-    lda    song.instruments.arpeggio.hi, Y
-    sta    _inst.arpeggio.hi, X
-
-.load_wav:
-    ; [todo]
-    
-    lda    <_tmp
-    sta    <_state, X
-    
-    ply
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_note
-; desc : Reset current note / frequency.
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_note:
-    ; Load octave+note
-    lda    [_si], Y
-    iny    
-    ; Retrieve channel index.
-    plx
-    ; Save octave+note
-    sta    <_tone, X
-	phy
-	tay
-
-	lda    freq_table.lo, Y
-	sta    <_frequency.lo, X
-	sta    psg_freq.lo
-	lda    freq_table.hi, Y
-	sta    <_frequency.hi, X
-	sta    psg_freq.hi
-
-    lda    _volume.base, X
-    sta    <_volume, X
-
-	ply
-
-    jmp    _update_song_load_loop
-
-;;---------------------------------------------------------------------
-; name : load_undefined
-; desc : Handle undefined command.
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_undefined:
-	; Do nothing.
-    iny
-    plx
-    jmp    _update_song_load_loop
-;;---------------------------------------------------------------------
-; name : load_note_off
-; desc : Mute channel.
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-load_note_off:
-    lda    #%00_0_00000
-    sta    psg_ctrl
-    plx
-    jmp    _update_song_load_loop
-
-fx_load_table:
-    .dw load_arpeggio
-    .dw load_portamento_up
-    .dw load_portamento_down
-    .dw load_portamento_to_note
-    .dw load_vibrato
-    .dw load_port_to_note_vol_slide
-    .dw load_vibrato_vol_slide
-    .dw load_tremolo
-    .dw load_panning
-    .dw load_set_speed_value1
-    .dw load_volume_slide
-    .dw load_position_jump
-    .dw load_retrig
-    .dw load_pattern_break
-    .dw load_extended_commands
-    .dw load_set_speed_value2
-    .dw load_set_wave
-    .dw load_enable_noise_channel
-    .dw load_set_LFO_mode
-    .dw load_set_LFO_speed
-    .dw load_undefined
-    .dw load_undefined
-    .dw load_undefined
-    .dw load_enable_sample_output
-    .dw load_undefined
-    .dw load_undefined
-    .dw load_set_volume
-    .dw load_set_instrument
-    .dw load_undefined
-    .dw load_undefined
-    .dw load_undefined
-    .dw load_undefined
-    .dw load_note
-    .dw load_note_off
-
-	.data
+    .data
     .bank 1
 	.org $4000
 
 ; [todo::begin] dummy song
 song:
-    .include "song2.asm"
+    .include "song.asm"
+song.size = * - song
 ; [todo::end] dummy song
     .include "frequency.inc"
