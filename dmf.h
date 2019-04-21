@@ -92,7 +92,7 @@ enum Effect : uint8_t {
     SET_SAMPLES_BANK = 0xEB,
     NOTE_CUT         = 0xEC,
     NOTE_DELAY       = 0xED,
-    SYNC_DELAY       = 0xEE,
+    SYNC_SIGNAL      = 0xEE,
     GLOBAL_FINE_TUNE = 0xEF,
     // PC Engine Commands
     SET_WAVE        = 0x10,

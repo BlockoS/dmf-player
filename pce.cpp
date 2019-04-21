@@ -9,6 +9,73 @@
 
 namespace PCE {
 
+static Effect DMF2PCE(DMF::Effect fx) {
+    switch(fx) {
+        case DMF::ARPEGGIO:
+            return Arpeggio;
+        case DMF::PORTAMENTO_UP:
+            return PortamentoUp;
+        case DMF::PORTAMENTO_DOWN:
+            return PortamentoDown;
+        case DMF::PORTAMENTO_TO_NOTE:
+            return PortamentoToNote;
+        case DMF::VIBRATO:
+            return Vibrato;
+        case DMF::PORTAMENTO_TO_NOTE_VOLUME_SLIDE:
+            return PortToNoteVolSlide;
+        case DMF::VIBRATO_VOLUME_SIDE:
+            return VibratoVolSlide;
+        case DMF::TREMOLO:
+            return Tremolo;
+        case DMF::PANNING:
+            return Panning;
+        case DMF::SET_SPEED_VALUE_1:
+            return SetSpeedValue1;
+        case DMF::VOLUME_SLIDE:
+            return VolumeSlide;
+        case DMF::POSITION_JUMP:
+            return PositionJump;
+        case DMF::RETRIG:
+            return Retrig;
+        case DMF::PATTERN_BREAK:
+            return PatternBreak;
+        case DMF::SET_SPEED_VALUE_2:
+            return SetSpeedValue2;
+        case DMF::ARPEGGIO_SPEED:
+            return ArpeggioSpeed;
+        case DMF::NOTE_SLIDE_UP:
+            return NoteSlideUp;
+        case DMF::NOTE_SLIDE_DOWN:
+            return NoteslideDown;
+        case DMF::VIBRATO_MODE:
+            return VibratoMode;
+        case DMF::VIBRATO_DEPTH:
+            return VibratoDepth;
+        case DMF::FINE_TUNE:
+            return FineTune;
+        case DMF::SET_SAMPLES_BANK:
+            return SetSampleBank;
+        case DMF::NOTE_CUT:
+            return NoteOff;
+        case DMF::NOTE_DELAY:
+            return NoteDelay;
+        case DMF::SYNC_SIGNAL:
+            return SyncSignal;
+        case DMF::GLOBAL_FINE_TUNE:
+            return GlobalFineTune;
+        case DMF::SET_WAVE:
+            return SetWave;
+        case DMF::SET_NOISE:
+            return EnableNoiseChannel;
+        case DMF::SET_LFO_MODE:
+            return SetLFOMode;
+        case DMF::SET_LFO_SPEED:
+            return SetLFOSpeed;
+        default:
+            return Rest;
+    }
+}
+
 SongPacker::SongPacker()
 {}
 
@@ -79,35 +146,80 @@ void SongPacker::packPatternMatrix(DMF::Song const& song) {
     }
 }
 
+static inline void FlushRest(std::vector<uint8_t> &buffer, size_t &rest) {
+    for(; rest >= 64; rest -= (rest >= 256) ? 256 : rest) {
+        buffer.push_back(PCE::RestEx);
+        buffer.push_back(rest % 256);
+    }
+    if(rest) {
+        buffer.push_back(PCE::Rest | rest);
+    }
+    rest = 0;
+}
+
 void SongPacker::packPatternData(DMF::Song const& song) {
-// [todo] record pattern break
+    std::vector<std::vector<size_t>> parent;
+    parent.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
+    
+    // We record the pattern break destination offsets for each pattern.
+    for(size_t i=0; i<song.infos.systemChanCount; i++) {
+        for(size_t j=0; j<song.infos.totalRowsInPatternMatrix; j++) {
+            size_t pattern = song.patternMatrix[j + (i*song.infos.totalRowsInPatternMatrix)];
+            size_t k = (i * song.infos.totalRowsInPatternMatrix + pattern) * song.infos.totalRowsPerPattern;
+            
+            for(size_t l=0; l<song.infos.totalRowsPerPattern; l++, k++) {
+                const DMF::PatternData &pattern_data = song.patternData[k];
+                if(DMF::isEmpty(pattern_data, song.effectCount[i])) {
+                    continue;
+                }
+                for(size_t m=0; m<song.effectCount[i]; m++) {
+                    if(pattern_data.effect[m].code == DMF::PATTERN_BREAK) {
+                        if((j+1) < song.infos.totalRowsInPatternMatrix) {
+                            size_t next_pattern = song.patternMatrix[j+1];
+                            size_t offset = pattern_data.effect[m].data;
+                            size_t jump = (i * song.infos.totalRowsInPatternMatrix + next_pattern) * song.infos.totalRowsPerPattern + offset;
+                            parent[jump].push_back(k);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Process patterns
+    std::vector<size_t> jump_source, jump_destination;
+    jump_source.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
+    jump_destination.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
+   
+    const size_t none = (size_t)-1;
+
+    std::fill(jump_source.begin(), jump_source.end(), none);
+    std::fill(jump_destination.begin(), jump_destination.end(), none);
+
     for(size_t i=0; i<song.infos.systemChanCount; i++) {
         _matrix[i].buffer.clear();
         for(size_t j=0; j<_matrix[i].packed.size(); j++) {
-           
             size_t k, l;
             size_t start = (i * song.infos.totalRowsInPatternMatrix + _matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
             size_t rest = 0;
             _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
            
             size_t last = 0;
-
             for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
                 const DMF::PatternData &pattern_data = song.patternData[l];
+                
+                if(parent[l].size()) {
+                    FlushRest(_matrix[i].buffer, rest);   
+                    jump_destination[l] = _matrix[i].buffer.size(); 
+                }
+                
                 if(DMF::isEmpty(pattern_data, song.effectCount[i])) {
                     rest++;
                     continue;
                 }
                 last = _matrix[i].buffer.size();
-                for(; rest >= 64; rest -= (rest >= 256) ? 256 : rest) {
-                    _matrix[i].buffer.push_back(PCE::RestEx);
-                    _matrix[i].buffer.push_back(rest % 256);
-                }
-                if(rest) {
-                    _matrix[i].buffer.push_back(PCE::Rest | rest);
-                }
-                rest = 0;
-                   
+                FlushRest(_matrix[i].buffer, rest);   
+                
                 last = _matrix[i].buffer.size();
                 if(pattern_data.note == 100) {
                     _matrix[i].buffer.push_back(PCE::NoteOff);
@@ -138,7 +250,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
 					    uint8_t data;
 					    data = pattern_data.effect[m].data;
 					    // Preprocess / fix 
-					    // [todo] make a shiny method to fix effects!
 					    // - Volume slide
                         if(pattern_data.effect[m].code == 0x0A) {
 						    if(data > 0x0f) {	
@@ -151,23 +262,36 @@ void SongPacker::packPatternData(DMF::Song const& song) {
 							}
 						}
                         last = _matrix[i].buffer.size();
-                        _matrix[i].buffer.push_back(pattern_data.effect[m].code);
+                        // [todo] translate code!
+                        _matrix[i].buffer.push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
                         _matrix[i].buffer.push_back(data);
+                    
+                        if(pattern_data.effect[m].code == DMF::PATTERN_BREAK) {
+                            jump_source[l] = _matrix[i].buffer.size() - 1;
+                        }
                     }
                 } // effects
                 _matrix[i].buffer[last] |= 0x80;
             }
-            for(; rest >= 64; rest -= (rest >= 256) ? 256 : rest) {
-                _matrix[i].buffer.push_back(PCE::RestEx);
-                _matrix[i].buffer.push_back(rest % 256);
-            }
-            if(rest) {
-                _matrix[i].buffer.push_back(PCE::Rest | rest);
-            }
+            FlushRest(_matrix[i].buffer, rest);   
             _matrix[i].buffer.push_back(PCE::EndOfTrack);
         }
         _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
     } 
+
+    // Fix pattern break offsets
+    for(size_t i=0; i<song.infos.systemChanCount; i++) {
+        for(size_t j=0; j<_matrix[i].packed.size(); j++) {
+            size_t k, l;
+            size_t start = (i * song.infos.totalRowsInPatternMatrix + _matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
+            for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
+                for(auto index: parent[l]) {
+                    size_t src = jump_source[index];
+                    _matrix[i].buffer[src] = jump_destination[l];
+                }
+            }
+        }
+    }
 }
 
 bool SongPacker::output(Writer& writer)
