@@ -65,6 +65,7 @@ _vdc_ctrl   .ds 1
 _vsync_cnt  .ds 1
 
 player:
+; [todo] move stuffs to bss
 player.time_base         .ds 1
 player.time_tick         .ds 2
 player.pattern_rows      .ds 1
@@ -82,6 +83,15 @@ player.ptr               .ds 2
 player.current_time_tick .ds 2
 player.rest              .ds PSG_CHAN_COUNT 
 player.flag              .ds 1
+
+; ??
+player.global_freq_offset .ds 1
+player.note               .ds PSG_CHAN_COUNT
+player.balance            .ds PSG_CHAN_COUNT
+player.volume             .ds PSG_CHAN_COUNT
+player.tone_offset        .ds PSG_CHAN_COUNT
+player.freq_offset        .ds PSG_CHAN_COUNT
+player.volume_offset      .ds PSG_CHAN_COUNT
 
 ;;---------------------------------------------------------------------
 ; Song effects.
@@ -113,8 +123,8 @@ SetVolume          = $18
 SetInstrument      = $19
 Note               = $1a ; Set note+octave
 NoteOff            = $1b
-RestEx             = $79 ; For values >= 128
-Rest               = $80 ; For values between 0 and 127
+RestEx             = $3f ; For values >= 64
+Rest               = $40 ; For values between 0 and 63
 ;;---------------------------------------------------------------------
 
 ;----------------------------------------------------------------------
@@ -295,23 +305,20 @@ update_matrix:
     lda    <player.matrix_pos
     cmp    <player.matrix_rows
     bne    @l0
-        lda    #$ff
-        sta    <player.matrix_pos
-        cla
+        stz    <player.matrix_pos
 @l0:
-    clc
-    adc   <player.matrix
+    lda   <player.matrix
     sta    <_si
     
     lda    <player.matrix+1
-    adc    #$00
     sta    <_si+1
+    
+    stz    <player.pattern_pos
 
-    inc    <player.matrix_pos
-
+    ldy    <player.matrix_pos
     clx
 @set_pattern_ptr:
-    lda    [_si] 
+    lda    [_si], Y
     sta    <player.pattern.lo, X
 
     lda    <_si
@@ -322,7 +329,7 @@ update_matrix:
     adc    #$00
     sta    <_si+1
 
-    lda    [_si] 
+    lda    [_si], Y
     sta    <player.pattern.hi, X
 
     lda    <_si
@@ -332,8 +339,8 @@ update_matrix:
     lda    <_si+1
     adc    #$00
     sta    <_si+1
-
-    stz    <player.pattern_pos
+    
+    stz    <player.rest, X
     
     inx
     cpx    #PSG_CHAN_COUNT
@@ -342,6 +349,7 @@ update_matrix:
     stz    <player.current_time_tick
     stz    <player.current_time_tick+1
 
+    inc    <player.matrix_pos
     rts
 
 ;;---------------------------------------------------------------------
@@ -361,9 +369,11 @@ fetch_pattern:
         sec
         rts
 @check_rest:
-    cmp   #$3f
-    bcc  @fetch_pattern_data
-    beq  @rest_ex
+    cmp    #$80
+    bcs    @fetch
+    cmp    #$3f
+    bcc    @fetch
+    beq    @rest_ex
 @rest_std:
         and    #$3f
         bra    @rest_store
@@ -372,12 +382,14 @@ fetch_pattern:
         iny
 @rest_store:
         ldx    <player.chn
+        dec    a
         sta    <player.rest, X
         bra    @inc_ptr
 
-@fetch_pattern_data
+@fetch
     pha 
     
+    and   #$7f
     asl   A
     tax
 
@@ -438,27 +450,6 @@ pattern_data_func:
 
 ; [todo] params 
 update_chan:
-    lda    <player.current_time_tick
-    beq    @l0
-        dec    <player.current_time_tick
-        rts
-@l0:
-    lda    <player.time_base
-    sta    <player.current_time_tick
-
-    inc    <player.pattern_pos
-    
-    lda    <player.current_time_tick+1
-    beq    @l1
-        dec    <player.current_time_tick+1
-        rts
-@l1:
-    lda    <player.pattern_pos
-    and    #$01
-    tax
-    lda    <player.time_tick, X
-    sta    <player.current_time_tick+1
-
     ldx    <player.chn
     lda    <player.rest, X
     bne    @dec_rest
@@ -470,6 +461,7 @@ update_chan:
         bcc    @continue
             rts
 @continue:
+        ldx    <player.chn
         lda    <player.ptr
         sta    <player.pattern.lo, X
         lda    <player.ptr+1
@@ -483,23 +475,44 @@ update_chan:
 
 update_song:
     stz   <player.flag
+    
+    lda    <player.current_time_tick
+    beq    @l0
+        dec    <player.current_time_tick
+        rts
+@l0:
+    lda    <player.time_base
+    sta    <player.current_time_tick
+    
+    lda    <player.current_time_tick+1
+    beq    @l1
+        dec    <player.current_time_tick+1
+        rts
+@l1:
+    inc    <player.pattern_pos
+   
+    lda    <player.pattern_pos
+    and    #$01
+    tax
+    lda    <player.time_tick, X
+    sta    <player.current_time_tick+1
+
     clx
 @loop:
-    phx
     stx    <player.chn
     jsr    update_chan
-    bcc    @l1
+    bcc    @l2
         smb0    <player.flag
-@l1:
-    plx
+@l2:
+    ldx    <player.chn
     inx
     cpx    #PSG_CHAN_COUNT
     bne    @loop
 
-    bbr0   <player.flag, @l2
+    bbr0   <player.flag, @l3
         jsr   update_matrix
         jsr   update_song
-@l2:
+@l3:
     rts
 
 ; [todo] load data
@@ -517,7 +530,6 @@ tremolo:
 panning:
 set_speed_value1:
 volume_slide:
-position_jump:
 retrig:
 pattern_break:
 set_speed_value2:
@@ -542,6 +554,14 @@ note_on:
 note_off:
     ; [todo]
     rts
+
+position_jump:
+    lda    [player.ptr], Y
+    iny
+    sta    <player.matrix_pos
+    smb0   <player.flag
+    rts
+
 
     .data
     .bank 1
