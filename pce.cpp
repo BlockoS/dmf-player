@@ -247,22 +247,21 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
                     if((pattern_data.effect[m].code != 0xffff) && (pattern_data.effect[m].data != 0xffff)) {
-					    uint8_t data;
-					    data = pattern_data.effect[m].data;
-					    // Preprocess / fix 
-					    // - Volume slide
+                        uint8_t data;
+                        data = pattern_data.effect[m].data;
+                        // Preprocess / fix 
+                        // - Volume slide
                         if(pattern_data.effect[m].code == 0x0A) {
-						    if(data > 0x0f) {	
-						        // Positive delta.
-							    data >>= 4;
-						    }
-						    else {
-							 	// Negative delta.
-								data = ((data & 0x0f) ^ 0xff) + 1;
-							}
-						}
+                            if(data > 0x0f) {	
+                                // Positive delta.
+                                data >>= 4;
+                            }
+                            else {
+                                // Negative delta.
+                                data = ((data & 0x0f) ^ 0xff) + 1;
+                            }
+                        }
                         last = _matrix[i].buffer.size();
-                        // [todo] translate code!
                         _matrix[i].buffer.push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
                         _matrix[i].buffer.push_back(data);
                     
