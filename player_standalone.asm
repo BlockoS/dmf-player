@@ -81,8 +81,8 @@ player.pattern_pos       .ds 1
 player.ptr               .ds 2
 player.current_time_tick .ds 2
 player.rest              .ds PSG_CHAN_COUNT 
+player.flag              .ds 1
 
-	.bss
 ;;---------------------------------------------------------------------
 ; Song effects.
 Arpeggio           = $00
@@ -287,11 +287,27 @@ load_song:
     cpy    #12
     bne    @copy_header
     
-    lda    <player.matrix
+    stz    <player.matrix_pos
+    jsr    update_matrix
+    rts
+
+update_matrix:
+    lda    <player.matrix_pos
+    cmp    <player.matrix_rows
+    bne    @l0
+        lda    #$ff
+        sta    <player.matrix_pos
+        cla
+@l0:
+    clc
+    adc   <player.matrix
     sta    <_si
     
     lda    <player.matrix+1
+    adc    #$00
     sta    <_si+1
+
+    inc    <player.matrix_pos
 
     clx
 @set_pattern_ptr:
@@ -403,13 +419,18 @@ pattern_data_func:
     .dw position_jump
     .dw retrig
     .dw pattern_break
-    .dw extended_commands
     .dw set_speed_value2
     .dw set_wav
     .dw enable_noise_channel
     .dw set_LFO_mode
     .dw set_LFO_speed
-    .dw enable_sample_output
+    .dw note_slide_up
+    .dw note_slide_down
+    .dw note_delay
+    .dw sync_signal
+    .dw fine_tune
+    .dw global_fine_tune
+    .dw set_sample_bank
     .dw set_volume
     .dw set_instrument
     .dw note_on
@@ -446,11 +467,9 @@ update_chan:
         lda    <player.pattern.hi, X 
         sta    <player.ptr+1
         jsr    fetch_pattern
-        ; [todo] carry set => inc matrix_index, fetch pattern pointer
-        bcc    @test_todo
-@l2:        bra    @l2
-@test_todo:
-
+        bcc    @continue
+            rts
+@continue:
         lda    <player.ptr
         sta    <player.pattern.lo, X
         lda    <player.ptr+1
@@ -459,21 +478,28 @@ update_chan:
 @dec_rest:
     dec    <player.rest, X
 @end:
+    clc
     rts
 
 update_song:
+    stz   <player.flag
     clx
 @loop:
     phx
     stx    <player.chn
     jsr    update_chan
-;[todo] update_chan
-;[todo] update_note_fx
+    bcc    @l1
+        smb0    <player.flag
+@l1:
     plx
     inx
     cpx    #PSG_CHAN_COUNT
     bne    @loop
 
+    bbr0   <player.flag, @l2
+        jsr   update_matrix
+        jsr   update_song
+@l2:
     rts
 
 ; [todo] load data
@@ -494,13 +520,18 @@ volume_slide:
 position_jump:
 retrig:
 pattern_break:
-extended_commands:
 set_speed_value2:
 set_wav:
 enable_noise_channel:
 set_LFO_mode:
 set_LFO_speed:
-enable_sample_output:
+note_slide_up:
+note_slide_down:
+note_delay:
+sync_signal:
+fine_tune:
+global_fine_tune:
+set_sample_bank:
 set_volume:
 set_instrument:
 note_on:
