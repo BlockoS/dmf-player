@@ -129,9 +129,9 @@ void InstrumentList::pack(std::vector<DMF::Instrument> const& src) {
 
 void SongPacker::packPatternMatrix(DMF::Song const& song) {
     std::vector<int> offsets;
+    offsets.resize(song.infos.totalRowsInPatternMatrix);
     _matrix.resize(song.infos.systemChanCount);
     for(size_t j=0; j<song.infos.systemChanCount; j++) {
-        offsets.resize(song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
         std::fill(offsets.begin(), offsets.end(), -1);
     
         for(size_t i=0; i<song.infos.totalRowsInPatternMatrix; i++) {
@@ -166,7 +166,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
         for(size_t j=0; j<song.infos.totalRowsInPatternMatrix; j++) {
             size_t pattern = song.patternMatrix[j + (i*song.infos.totalRowsInPatternMatrix)];
             size_t k = (i * song.infos.totalRowsInPatternMatrix + pattern) * song.infos.totalRowsPerPattern;
-            
             for(size_t l=0; l<song.infos.totalRowsPerPattern; l++, k++) {
                 const DMF::PatternData &pattern_data = song.patternData[k];
                 if(DMF::isEmpty(pattern_data, song.effectCount[i])) {

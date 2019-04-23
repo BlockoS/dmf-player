@@ -3,6 +3,7 @@
 #include <array>
 #include <zlib.h>
 #include <cstring>
+#include <algorithm>
 
 #include "datareader.h"
 
@@ -406,7 +407,7 @@ bool DataReader::read(Song &song) {
         song.patternData.clear();
         return false;
     }
-    
+   
     // Load samples
     ok = read(size);
     if(!ok) {
@@ -422,6 +423,10 @@ bool DataReader::read(Song &song) {
             return false;
         }
     }
+    
+    // Reorganize patter data...
+    fixPatterns(song);
+
     return true;
 }
 /// Compare data and move offset if they matches.
@@ -441,5 +446,53 @@ bool DataReader::compare(const void* src, size_t len) {
     _offset += len;
     return true;
 }
+
+bool operator==(const PatternData &d0, const PatternData &d1) {
+    for(int i=0; i<DMF_MAX_EFFECT_COUNT; i++) {
+        if((d0.effect[i].code != d1.effect[i].code) || 
+           (d0.effect[i].data != d1.effect[i].data)) {
+            return false;
+        }
+    }
+    return (d0.note == d1.note) &&
+           (d0.octave == d1.octave) &&
+           (d0.volume == d1.volume) && 
+           (d0.instrument == d1.instrument);
+}
+
+/// Reorganize pattern data in order to match matrix indices.
+void DataReader::fixPatterns(Song &song) {
+    std::vector<PatternData> data;
+    std::vector<int> source;
+    data.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
+    source.resize(song.infos.totalRowsInPatternMatrix);
+    for(size_t i=0; i<song.infos.systemChanCount; i++)  {
+        std::fill(source.begin(), source.end(), -1);
+        for(size_t j=0; j<song.infos.totalRowsInPatternMatrix; j++) {
+            size_t pattern_index = song.patternMatrix[(i*song.infos.totalRowsInPatternMatrix) + j];
+            
+            size_t start = ((i * song.infos.totalRowsInPatternMatrix) + j) * song.infos.totalRowsPerPattern;
+            size_t end   = start + song.infos.totalRowsPerPattern;
+            size_t dest  = ((i * song.infos.totalRowsInPatternMatrix) + pattern_index) * song.infos.totalRowsPerPattern;
+          
+            if(source[pattern_index] < 0) {
+                std::copy(&song.patternData[start], &song.patternData[end], &data[dest]);
+                source[pattern_index] = pattern_index;
+            }
+            else {
+                // check for consistency
+                bool match = true;
+                for( ; match && (start<end); start++, dest++) {
+                    match = (song.patternData[start] == data[dest]);
+                }
+                if(!match) {
+                    fprintf(stderr, "Pattern mismatch (%d:%zd %zd)!\n", source[pattern_index], j, pattern_index);
+                }
+            }
+        }
+    }
+    song.patternData = std::move(data);
+}
+
 
 } // DMF

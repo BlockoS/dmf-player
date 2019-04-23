@@ -12,7 +12,7 @@ namespace DMF {
 /// @return true if the pattern element is empty, false otherwise.
 bool isEmpty(PatternData const& src, unsigned int count) {
     bool empty_fx = true;
-    for(unsigned int i=0; (i<DMF_MAX_EFFECT_COUNT) && (i<count); i++) {
+    for(unsigned int i=0; (i<DMF_MAX_EFFECT_COUNT) && (i<count) && empty_fx; i++) {
         empty_fx =  empty_fx
                  && (src.effect[i].code == 0xffff)
                  && (src.effect[i].data == 0xffff);

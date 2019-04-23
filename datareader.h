@@ -85,6 +85,9 @@ class DataReader {
         /// @return true if the file was successfully decompressed.
         bool decompress(FILE* stream);
 
+        /// Reorganize pattern data in order to match matrix indices.
+        void fixPatterns(Song &song);
+
     private:
         /// Input byte buffer.
         std::vector<uint8_t> _buffer;
