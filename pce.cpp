@@ -158,43 +158,7 @@ static inline void FlushRest(std::vector<uint8_t> &buffer, size_t &rest) {
 }
 
 void SongPacker::packPatternData(DMF::Song const& song) {
-    std::vector<std::vector<size_t>> parent;
-    parent.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
-    
-    // We record the pattern break destination offsets for each pattern.
-    for(size_t i=0; i<song.infos.systemChanCount; i++) {
-        for(size_t j=0; j<song.infos.totalRowsInPatternMatrix; j++) {
-            size_t pattern = song.patternMatrix[j + (i*song.infos.totalRowsInPatternMatrix)];
-            size_t k = (i * song.infos.totalRowsInPatternMatrix + pattern) * song.infos.totalRowsPerPattern;
-            for(size_t l=0; l<song.infos.totalRowsPerPattern; l++, k++) {
-                const DMF::PatternData &pattern_data = song.patternData[k];
-                if(DMF::isEmpty(pattern_data, song.effectCount[i])) {
-                    continue;
-                }
-                for(size_t m=0; m<song.effectCount[i]; m++) {
-                    if(pattern_data.effect[m].code == DMF::PATTERN_BREAK) {
-                        if((j+1) < song.infos.totalRowsInPatternMatrix) {
-                            size_t next_pattern = song.patternMatrix[j+1];
-                            size_t offset = pattern_data.effect[m].data;
-                            size_t jump = (i * song.infos.totalRowsInPatternMatrix + next_pattern) * song.infos.totalRowsPerPattern + offset;
-                            parent[jump].push_back(k);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // Process patterns
-    std::vector<size_t> jump_source, jump_destination;
-    jump_source.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
-    jump_destination.resize(song.infos.systemChanCount * song.infos.totalRowsInPatternMatrix * song.infos.totalRowsPerPattern);
-   
-    const size_t none = (size_t)-1;
-
-    std::fill(jump_source.begin(), jump_source.end(), none);
-    std::fill(jump_destination.begin(), jump_destination.end(), none);
-
     for(size_t i=0; i<song.infos.systemChanCount; i++) {
         _matrix[i].buffer.clear();
         for(size_t j=0; j<_matrix[i].packed.size(); j++) {
@@ -206,12 +170,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
             size_t last = 0;
             for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
                 const DMF::PatternData &pattern_data = song.patternData[l];
-                
-                if(parent[l].size()) {
-                    FlushRest(_matrix[i].buffer, rest);   
-                    jump_destination[l] = _matrix[i].buffer.size(); 
-                }
-                
                 if(DMF::isEmpty(pattern_data, song.effectCount[i])) {
                     rest++;
                     continue;
@@ -263,10 +221,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                         last = _matrix[i].buffer.size();
                         _matrix[i].buffer.push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
                         _matrix[i].buffer.push_back(data);
-                    
-                        if(pattern_data.effect[m].code == DMF::PATTERN_BREAK) {
-                            jump_source[l] = _matrix[i].buffer.size() - 1;
-                        }
                     }
                 } // effects
                 _matrix[i].buffer[last] |= 0x80;
@@ -276,20 +230,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
         }
         _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
     } 
-
-    // Fix pattern break offsets
-    for(size_t i=0; i<song.infos.systemChanCount; i++) {
-        for(size_t j=0; j<_matrix[i].packed.size(); j++) {
-            size_t k, l;
-            size_t start = (i * song.infos.totalRowsInPatternMatrix + _matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
-            for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
-                for(auto index: parent[l]) {
-                    size_t src = jump_source[index];
-                    _matrix[i].buffer[src] = jump_destination[l];
-                }
-            }
-        }
-    }
 }
 
 bool SongPacker::output(Writer& writer)

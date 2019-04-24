@@ -531,7 +531,6 @@ panning:
 set_speed_value1:
 volume_slide:
 retrig:
-pattern_break:
 set_speed_value2:
 set_wav:
 enable_noise_channel:
@@ -553,6 +552,11 @@ note_on:
     rts
 note_off:
     ; [todo]
+    rts
+
+pattern_break:
+    ; [todo] ignored for now
+    iny
     rts
 
 position_jump:

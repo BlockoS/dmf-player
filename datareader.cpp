@@ -292,6 +292,9 @@ bool DataReader::read(PatternData& data, uint8_t effectCount) {
     ok = read(data.note);
     if(ok) { ok = read(data.octave); }
     if(ok) { ok = read(data.volume); }
+    for(size_t i=0; i<DMF_MAX_EFFECT_COUNT; i++) {
+        data.effect[i].code = data.effect[i].data = 0xffff;
+    }
     for(size_t i=0; ok && (i<effectCount); i++) {
         ok = read(data.effect[i].code);
         if(ok) {

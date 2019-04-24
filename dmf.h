@@ -9,7 +9,7 @@
 #include <vector>
 
 #define MAX_STRING_BUFFER_LEN 255
-#define DMF_MAX_EFFECT_COUNT 4
+#define DMF_MAX_EFFECT_COUNT 8
 
 namespace DMF {
 
