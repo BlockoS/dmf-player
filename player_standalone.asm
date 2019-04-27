@@ -59,13 +59,22 @@ PSG_CTRL_FULL_VOLUME    .equ %0011_1111 ; channel maximum volume (bit 5 is unuse
 PSG_VOLUME_MAX = $1f ; Maximum volume value
 
     .zp
+_al         .ds 1
 _si         .ds 2
 _vdc_reg    .ds 1
 _vdc_ctrl   .ds 1
 _vsync_cnt  .ds 1
 
-player:
-; [todo] move stuffs to bss
+player.chn               .ds 1
+player.pattern_pos       .ds 1
+player.ptr               .ds 2
+player.rest              .ds PSG_CHAN_COUNT 
+player.flag              .ds 1
+player.current_time_tick .ds 2
+player.chn_flag          .ds PSG_CHAN_COUNT
+
+    .bss
+player.infos:
 player.time_base         .ds 1
 player.time_tick         .ds 2
 player.pattern_rows      .ds 1
@@ -75,23 +84,18 @@ player.wav               .ds 2
 player.instruments       .ds 2
 player.matrix            .ds 2
 player.matrix_pos        .ds 1
-player.chn               .ds 1
 player.pattern.lo        .ds PSG_CHAN_COUNT
 player.pattern.hi        .ds PSG_CHAN_COUNT
-player.pattern_pos       .ds 1
-player.ptr               .ds 2
-player.current_time_tick .ds 2
-player.rest              .ds PSG_CHAN_COUNT 
-player.flag              .ds 1
 
-; ??
-player.global_freq_offset .ds 1
-player.note               .ds PSG_CHAN_COUNT
-player.balance            .ds PSG_CHAN_COUNT
-player.volume             .ds PSG_CHAN_COUNT
-player.tone_offset        .ds PSG_CHAN_COUNT
-player.freq_offset        .ds PSG_CHAN_COUNT
-player.volume_offset      .ds PSG_CHAN_COUNT
+
+player.note              .ds PSG_CHAN_COUNT
+player.volume            .ds PSG_CHAN_COUNT
+
+player.wav_upload       .ds 1 ; tin
+player.wav_upload.src   .ds 2
+player.wav_upload.dst   .ds 2
+player.wav_upload.len   .ds 2
+player.wav_upload.rts   .ds 1 ; rts
 
 ;;---------------------------------------------------------------------
 ; Song effects.
@@ -289,52 +293,66 @@ irq_reset:
 ; out  : 
 ;;---------------------------------------------------------------------
 load_song:
+    lda    #$d3                 ; tin
+    sta    player.wav_upload
+    lda    #32
+    sta    player.wav_upload.len
+    stz    player.wav_upload.len+1
+    lda    #$60                 ; rts
+    sta    player.wav_upload.rts
+    lda    #low(psg_wavebuf)
+    sta    player.wav_upload.dst
+    lda    #high(psg_wavebuf)
+    sta    player.wav_upload.dst+1
+
+    ; [todo] load default waveform
+
     cly
 @copy_header:
     lda    [_si], Y
-    sta    player, Y
+    sta    player.infos, Y
     iny
     cpy    #12
     bne    @copy_header
     
-    stz    <player.matrix_pos
+    stz    player.matrix_pos
     jsr    update_matrix
     rts
 
 update_matrix:
-    lda    <player.matrix_pos
-    cmp    <player.matrix_rows
+    lda    player.matrix_pos
+    cmp    player.matrix_rows
     bne    @l0
-        stz    <player.matrix_pos
+        stz    player.matrix_pos
 @l0:
-    lda   <player.matrix
+    lda    player.matrix
     sta    <_si
     
-    lda    <player.matrix+1
+    lda    player.matrix+1
     sta    <_si+1
     
-    stz    <player.pattern_pos
+    stz    player.pattern_pos
 
-    ldy    <player.matrix_pos
+    ldy    player.matrix_pos
     clx
 @set_pattern_ptr:
     lda    [_si], Y
-    sta    <player.pattern.lo, X
+    sta    player.pattern.lo, X
 
     lda    <_si
     clc
-    adc    <player.matrix_rows
+    adc    player.matrix_rows
     sta    <_si
     lda    <_si+1
     adc    #$00
     sta    <_si+1
 
     lda    [_si], Y
-    sta    <player.pattern.hi, X
+    sta    player.pattern.hi, X
 
     lda    <_si
     clc
-    adc    <player.matrix_rows
+    adc    player.matrix_rows
     sta    <_si
     lda    <_si+1
     adc    #$00
@@ -346,10 +364,11 @@ update_matrix:
     cpx    #PSG_CHAN_COUNT
     bne    @set_pattern_ptr
 
-    stz    <player.current_time_tick
-    stz    <player.current_time_tick+1
+    lda    #1
+    sta    <player.current_time_tick
+    sta    <player.current_time_tick+1
 
-    inc    <player.matrix_pos
+    inc    player.matrix_pos
     rts
 
 ;;---------------------------------------------------------------------
@@ -453,9 +472,9 @@ update_chan:
     ldx    <player.chn
     lda    <player.rest, X
     bne    @dec_rest
-        lda    <player.pattern.lo, X
+        lda    player.pattern.lo, X
         sta    <player.ptr
-        lda    <player.pattern.hi, X 
+        lda    player.pattern.hi, X 
         sta    <player.ptr+1
         jsr    fetch_pattern
         bcc    @continue
@@ -463,9 +482,9 @@ update_chan:
 @continue:
         ldx    <player.chn
         lda    <player.ptr
-        sta    <player.pattern.lo, X
+        sta    player.pattern.lo, X
         lda    <player.ptr+1
-        sta    <player.pattern.hi, X 
+        sta    player.pattern.hi, X 
         rts
 @dec_rest:
     dec    <player.rest, X
@@ -476,17 +495,21 @@ update_chan:
 update_song:
     stz   <player.flag
     
-    lda    <player.current_time_tick
+    ;lda    <player.current_time_tick
+    dec    <player.current_time_tick
     beq    @l0
-        dec    <player.current_time_tick
+    bmi    @l0
+        ;dec    <player.current_time_tick
         rts
 @l0:
-    lda    <player.time_base
+    lda    player.time_base
     sta    <player.current_time_tick
     
-    lda    <player.current_time_tick+1
+    ;lda    <player.current_time_tick+1
+    dec    <player.current_time_tick+1
     beq    @l1
-        dec    <player.current_time_tick+1
+    bmi    @l1
+        ;dec    <player.current_time_tick+1
         rts
 @l1:
     inc    <player.pattern_pos
@@ -494,16 +517,18 @@ update_song:
     lda    <player.pattern_pos
     and    #$01
     tax
-    lda    <player.time_tick, X
+    lda    player.time_tick, X
     sta    <player.current_time_tick+1
 
     clx
 @loop:
     stx    <player.chn
+    stx    psg_ch
     jsr    update_chan
     bcc    @l2
         smb0    <player.flag
 @l2:
+    jsr    update_psg
     ldx    <player.chn
     inx
     cpx    #PSG_CHAN_COUNT
@@ -513,6 +538,39 @@ update_song:
         jsr   update_matrix
         jsr   update_song
 @l3:
+    rts
+
+update_psg:
+    phy
+
+    ldx    <player.chn
+    lda    <player.chn_flag, X
+    sta    <_al
+    bbr2   <_al, @l0
+        rmb2   <_al
+        bbs0    <_al, @noise
+            ldy    player.note, X
+            lda    freq_table.lo, Y
+            sta    psg_freq.lo
+            lda    freq_table.hi, Y
+            sta    psg_freq.hi
+            bra    @l0
+@noise:
+            lda    player.note, X
+            and    #$0f
+            tay
+            lda    noise_table, Y 
+            sta    psg_noise
+@l0:
+    bbr1   <_al, @l1
+        rmb1    <_al
+        lda    player.volume, X
+        lsr    A
+        lsr    A
+        ora    #%10_0_00000
+        sta    psg_ctrl
+@l1:
+    ply
     rts
 
 ; [todo] load data
@@ -527,13 +585,10 @@ vibrato_depth:
 port_to_note_vol_slide:
 vibrato_vol_slide:
 tremolo:
-panning:
 set_speed_value1:
 volume_slide:
 retrig:
 set_speed_value2:
-set_wav:
-enable_noise_channel:
 set_LFO_mode:
 set_LFO_speed:
 note_slide_up:
@@ -543,26 +598,113 @@ sync_signal:
 fine_tune:
 global_fine_tune:
 set_sample_bank:
-set_volume:
 set_instrument:
+    lda    [player.ptr], Y
+    iny
+    rts
+
+enable_noise_channel:
+    ldx    <player.chn
+    lda    <player.chn_flag, X
+    and    #%1111_1110 
+    ora    [player.ptr], Y
+    iny
+
+    sta    <player.chn_flag, X 
+    rts
+
+
+panning:
+    lda    [player.ptr], Y
+    sta    psg_pan
+    iny
+    rts
+
+set_volume:
+    lda    [player.ptr], Y
+    iny
+    ldx    <player.chn
+    sta    player.volume, X
+    
+    lda    <player.chn_flag, X
+    ora    #%0000_0010
+    sta    <player.chn_flag, X 
+    
+    rts
+
+set_wav:
+    ; Reset write index
+    lda    #%01_0_00000
+    sta    psg_ctrl
+
+    ; Enable write buffer
+    stz    psg_ctrl
+    
+    ; Copy wave buffer
+    lda    [player.ptr], Y
+    iny
+    
+    stz    <_si
+    
+    lsr    A
+    ror    <_si
+    
+    lsr    A
+    ror    <_si
+    
+    lsr    A
+    ror    <_si
+    sta    <_si+1
+    
+    lda    player.wav
+    clc
+    adc    <_si
+    sta    player.wav_upload.src
+    lda    player.wav+1
+    adc    <_si+1
+    sta    player.wav_upload.src+1
+
+    jsr    player.wav_upload
+
+    lda    #%01_0_00000
+    sta    psg_ctrl
+
+    ; Restore channel volume
+    ldx    <player.chn
+    lda    player.volume, X
+    lsr    A
+    lsr    A
+    ora    #%10_0_00000
+    sta    psg_ctrl
+    
+    rts
+
 note_on:
     lda    [player.ptr], Y
     iny
-    ; [todo]
+    
+    ldx    <player.chn
+    sta    player.note, X
+    
+    lda    <player.chn_flag, X
+    ora    #%0000_0100
+    sta    <player.chn_flag, X 
+    
     rts
+
 note_off:
-    ; [todo]
+    stz    psg_ctrl
     rts
 
 pattern_break:
-    ; [todo] ignored for now
+    ;  ignored for now
     iny
     rts
 
 position_jump:
     lda    [player.ptr], Y
     iny
-    sta    <player.matrix_pos
+    sta    player.matrix_pos
     smb0   <player.flag
     rts
 

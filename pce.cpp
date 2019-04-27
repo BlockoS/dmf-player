@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Vincent "MooZ" Cruz and other contributors. All rights reserved.
+// Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors. All rights reserved.
 // Copyrights licensed under the New BSD License. See the accompanying LICENSE file for terms.
 #include <cstdlib>
 #include <cstdio>
@@ -160,13 +160,11 @@ static inline void FlushRest(std::vector<uint8_t> &buffer, size_t &rest) {
 void SongPacker::packPatternData(DMF::Song const& song) {
     // Process patterns
     for(size_t i=0; i<song.infos.systemChanCount; i++) {
-        _matrix[i].buffer.clear();
+        _matrix[i].buffer.resize(_matrix[i].packed.size());
         for(size_t j=0; j<_matrix[i].packed.size(); j++) {
             size_t k, l;
             size_t start = (i * song.infos.totalRowsInPatternMatrix + _matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
             size_t rest = 0;
-            _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
-           
             size_t last = 0;
             for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
                 const DMF::PatternData &pattern_data = song.patternData[l];
@@ -174,39 +172,38 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                     rest++;
                     continue;
                 }
-                last = _matrix[i].buffer.size();
-                FlushRest(_matrix[i].buffer, rest);   
+                FlushRest(_matrix[i].buffer[j], rest);
                 
-                last = _matrix[i].buffer.size();
+                last = _matrix[i].buffer[j].size();
                 if(pattern_data.note == 100) {
-                    _matrix[i].buffer.push_back(PCE::NoteOff);
+                    _matrix[i].buffer[j].push_back(PCE::NoteOff);
                 }
                 else if(pattern_data.note && pattern_data.octave) {
                     uint8_t dummy;
                     // Let's fix octave and notes...
                     dummy  = (pattern_data.note % 12) & 0x0f;
                     dummy |= ((pattern_data.octave + (dummy ? 1 : 2)) & 0x0f) << 4;
-                    _matrix[i].buffer.push_back(PCE::Note);
-                    _matrix[i].buffer.push_back(dummy);
+                    _matrix[i].buffer[j].push_back(PCE::Note);
+                    _matrix[i].buffer[j].push_back(dummy);
                 }
                 
                 if(pattern_data.volume != 0xffff) {
-                    last = _matrix[i].buffer.size();
-                    _matrix[i].buffer.push_back(PCE::SetVolume);
-                    _matrix[i].buffer.push_back(pattern_data.volume * 4);
+                    last = _matrix[i].buffer[j].size();
+                    _matrix[i].buffer[j].push_back(PCE::SetVolume);
+                    _matrix[i].buffer[j].push_back(pattern_data.volume * 4);
                 }
                 
                 if(pattern_data.instrument != 0xffff) {
-                    last = _matrix[i].buffer.size();
-                    _matrix[i].buffer.push_back(PCE::SetInstrument);
-                    _matrix[i].buffer.push_back(pattern_data.instrument);
+                    last = _matrix[i].buffer[j].size();
+                    _matrix[i].buffer[j].push_back(PCE::SetInstrument);
+                    _matrix[i].buffer[j].push_back(pattern_data.instrument);
                 }
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
                     if((pattern_data.effect[m].code != 0xffff) && (pattern_data.effect[m].data != 0xffff)) {
                         uint8_t data;
                         data = pattern_data.effect[m].data;
-                        // Preprocess / fix 
+                        // Preprocess / fix
                         // - Volume slide
                         if(pattern_data.effect[m].code == 0x0A) {
                             if(data > 0x0f) {	
@@ -218,17 +215,19 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                                 data = ((data & 0x0f) ^ 0xff) + 1;
                             }
                         }
-                        last = _matrix[i].buffer.size();
-                        _matrix[i].buffer.push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
-                        _matrix[i].buffer.push_back(data);
+                        last = _matrix[i].buffer[j].size();
+                        if(pattern_data.effect[m].code == DMF::SET_NOISE) {
+                            fprintf(stderr, "%zd %zx %zx NOISE %0x\n", i, j, _matrix[i].packed[j], data);
+                        }
+                        _matrix[i].buffer[j].push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
+                        _matrix[i].buffer[j].push_back(data);
                     }
                 } // effects
-                _matrix[i].buffer[last] |= 0x80;
+                _matrix[i].buffer[j][last] |= 0x80;
             }
-            FlushRest(_matrix[i].buffer, rest);   
-            _matrix[i].buffer.push_back(PCE::EndOfTrack);
+            FlushRest(_matrix[i].buffer[j], rest);   
+            _matrix[i].buffer[j].push_back(PCE::EndOfTrack);
         }
-        _matrix[i].bufferOffset.push_back(_matrix[i].buffer.size());
     } 
 }
 

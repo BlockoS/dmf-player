@@ -30,7 +30,7 @@ int main(int argc, char **argv)
     std::ifstream input;
     input.open(argv[1], std::ifstream::binary);
     
-    if(nullptr == input)
+    if(!input)
     {
         std::cerr << "Failed to open " << argv[1] << " " << std::endl;
         return 1;

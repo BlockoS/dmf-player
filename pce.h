@@ -8,6 +8,8 @@
 #include <array>
 #include "dmf.h"
 
+#define PCE_CHAN_COUNT 6
+
 namespace PCE {
     enum Effect {
         Arpeggio,
@@ -51,8 +53,7 @@ namespace PCE {
     struct PatternMatrix {
         std::vector<int> pattern;
         std::vector<int> packed;
-        std::vector<int> bufferOffset;
-        std::vector<uint8_t> buffer;
+        std::vector<std::vector<uint8_t>> buffer;
     };
 
     struct Envelope {

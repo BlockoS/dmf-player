@@ -210,11 +210,9 @@ bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> c
 
 bool Writer::writePatternData(PCE::PatternMatrix const& pattern, size_t& index) {
     bool ret = true;
-    for(size_t j=0; ret && (j<pattern.bufferOffset.size()-1); j++) {
+    for(size_t j=0; ret && (j<pattern.buffer.size()); j++) {
         fprintf(_output, "%s.pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
-        int offset  = pattern.bufferOffset[j];
-        size_t size = pattern.bufferOffset[j+1] - offset;
-        ret = writeBytes(&pattern.buffer[offset], size, 16);
+        ret = writeBytes(pattern.buffer[j].data(), pattern.buffer[j].size(), 16);
     }
     return ret;
 }
