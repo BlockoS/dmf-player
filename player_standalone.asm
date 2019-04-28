@@ -65,13 +65,16 @@ _vdc_reg    .ds 1
 _vdc_ctrl   .ds 1
 _vsync_cnt  .ds 1
 
-player.chn               .ds 1
-player.pattern_pos       .ds 1
-player.ptr               .ds 2
-player.rest              .ds PSG_CHAN_COUNT 
-player.flag              .ds 1
-player.current_time_tick .ds 2
-player.chn_flag          .ds PSG_CHAN_COUNT
+player.chn                      .ds 1
+player.pattern_pos              .ds 1
+player.ptr                      .ds 2
+player.rest                     .ds PSG_CHAN_COUNT 
+player.flag                     .ds 1
+player.current_time_tick        .ds 2
+player.chn_flag                 .ds PSG_CHAN_COUNT
+player.current_arpeggio_tick    .ds PSG_CHAN_COUNT
+
+_note .ds 1
 
     .bss
 player.infos:
@@ -86,9 +89,10 @@ player.matrix            .ds 2
 player.matrix_pos        .ds 1
 player.pattern.lo        .ds PSG_CHAN_COUNT
 player.pattern.hi        .ds PSG_CHAN_COUNT
+player.arpeggio_tick     .ds PSG_CHAN_COUNT
+player.arpeggio_speed    .ds PSG_CHAN_COUNT
 
 
-player.base_note         .ds PSG_CHAN_COUNT
 player.note              .ds PSG_CHAN_COUNT
 player.volume            .ds PSG_CHAN_COUNT
 player.arpeggio          .ds PSG_CHAN_COUNT
@@ -285,6 +289,15 @@ irq_reset:
 
     jsr    update_song
 
+    clx
+@l0:
+    stx    <player.chn
+    jsr    update_psg
+
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    @l0
+
     bra    .loop
 
 
@@ -318,6 +331,37 @@ load_song:
     
     stz    player.matrix_pos
     jsr    update_matrix
+
+    ; setup PSG
+    lda    #$ff
+    sta psg_mainvol
+
+    clx
+@psg_init:
+    stx    psg_ch
+    cpx    #4
+    bcc    @no_noise
+        stz    psg_noise
+@no_noise:
+
+    lda    #$ff
+    sta    psg_pan
+
+    lda    #%01_0_00000
+    sta    psg_ctrl
+
+    stz    psg_ctrl
+    
+    lda    player.wav
+    sta    player.wav_upload.src
+    lda    player.wav+1
+    sta    player.wav_upload.src+1
+    jsr    player.wav_upload
+
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    @psg_init
+
     rts
 
 update_matrix:
@@ -361,6 +405,11 @@ update_matrix:
     
     stz    <player.rest, X
     
+    lda    #1
+    sta    player.arpeggio_speed, X
+    sta    player.arpeggio_tick, X
+    sta    <player.current_arpeggio_tick, X
+
     inx
     cpx    #PSG_CHAN_COUNT
     bne    @set_pattern_ptr
@@ -370,37 +419,6 @@ update_matrix:
     sta    <player.current_time_tick+1
 
     inc    player.matrix_pos
-
-
-    ; setup PSG
-    lda    #$ff
-    sta psg_mainvol
-
-    clx
-@psg_init:
-    stx    psg_ch
-    cpx    #4
-    bcc    @no_noise
-        stz    psg_noise
-@no_noise:
-
-    lda    #$ff
-    sta    psg_pan
-
-    lda    #%01_0_00000
-    sta    psg_ctrl
-
-    stz    psg_ctrl
-    
-    lda    player.wav
-    sta    player.wav_upload.src
-    lda    player.wav+1
-    sta    player.wav_upload.src+1
-    jsr    player.wav_upload
-
-    inx
-    cpx    #PSG_CHAN_COUNT
-    bne    @psg_init
 
     rts
 
@@ -561,7 +579,6 @@ update_song:
     bcc    @l2
         smb0    <player.flag
 @l2:
-    jsr    update_psg
     ldx    <player.chn
     inx
     cpx    #PSG_CHAN_COUNT
@@ -574,45 +591,57 @@ update_song:
     rts
 
 update_psg:
-    phy
-
-    ldx    <player.chn
+    stx    <player.chn
+    stx    psg_ch
     lda    <player.chn_flag, X
     sta    <_al
 
-    lda    player.base_note, X
+    lda    player.note, X
     ; [todo] instrument arpeggio
-    sta    player.note, X
+    sta    <_note
 
-    lda    player.arpeggio, X
-    bra    @no_arpeggio
-        smb2  <_al
-        ldy   <player.current_time_tick     ; [todo] arpeggio timing
-        beq   @no_arpeggio
+    ldy    player.arpeggio, X
+    beq    @no_arpeggio
+        dec    player.arpeggio_tick, X
+        bne    @no_arpeggio
+
+        lda    player.arpeggio_speed, X
+        sta    player.arpeggio_tick, X
+
+        tya
+
+        smb2   <_al
+        ldy    <player.current_arpeggio_tick, X
+        beq    @arpeggio.0
         dey
-        beq   @lo
+        beq   @arpeggio.1
+@arpeggio.2:
+            ldy    #$ff
+            sty    <player.current_arpeggio_tick, X
             lsr    A
             lsr    A
             lsr    A
             lsr    A
-@lo:
+@arpeggio.1:
         and    #$0f
         clc
-        adc    player.note, X
-        sta    player.note, X
+        adc    <_note
+        sta    <_note
+@arpeggio.0
+        inc    <player.current_arpeggio_tick, X
 @no_arpeggio:
 
     bbr2   <_al, @l0
         rmb2   <_al
         bbs0    <_al, @noise
-            ldy    player.note, X
+            ldy    <_note
             lda    freq_table.lo, Y
             sta    psg_freq.lo
             lda    freq_table.hi, Y
             sta    psg_freq.hi
             bra    @l0
 @noise:
-            lda    player.note, X
+            lda    <_note
             and    #$0f
             tay
             lda    noise_table, Y 
@@ -629,11 +658,9 @@ update_psg:
     lda     <_al
     sta     <player.chn_flag, X
 
-    ply
     rts
 
 ; [todo] load data
-arpeggio_speed:
 portamento_up:
 portamento_down:
 portamento_to_note:
@@ -660,12 +687,22 @@ set_instrument:
     lda    [player.ptr], Y
     iny
     rts
+    
+arpeggio_speed:
+    lda    [player.ptr], Y
+    iny
+    ldx    <player.chn
+    sta    player.arpeggio_speed, X
+    rts
 
 arpeggio:
     lda    [player.ptr], Y
     iny
     ldx    <player.chn
     sta    player.arpeggio, X
+    lda    player.arpeggio_speed, X
+    sta    player.arpeggio_tick, X
+    stz    <player.current_arpeggio_tick, X
     rts
 
 enable_noise_channel:
@@ -748,7 +785,7 @@ note_on:
     iny
     
     ldx    <player.chn
-    sta    player.base_note, X
+    sta    player.note, X
     
     lda    <player.chn_flag, X
     ora    #%0000_0100
