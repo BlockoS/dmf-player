@@ -88,8 +88,10 @@ player.pattern.lo        .ds PSG_CHAN_COUNT
 player.pattern.hi        .ds PSG_CHAN_COUNT
 
 
+player.base_note         .ds PSG_CHAN_COUNT
 player.note              .ds PSG_CHAN_COUNT
 player.volume            .ds PSG_CHAN_COUNT
+player.arpeggio          .ds PSG_CHAN_COUNT
 
 player.wav_upload       .ds 1 ; tin
 player.wav_upload.src   .ds 2
@@ -577,6 +579,29 @@ update_psg:
     ldx    <player.chn
     lda    <player.chn_flag, X
     sta    <_al
+
+    lda    player.base_note, X
+    ; [todo] instrument arpeggio
+    sta    player.note, X
+
+    lda    player.arpeggio, X
+    bra    @no_arpeggio
+        smb2  <_al
+        ldy   <player.current_time_tick     ; [todo] arpeggio timing
+        beq   @no_arpeggio
+        dey
+        beq   @lo
+            lsr    A
+            lsr    A
+            lsr    A
+            lsr    A
+@lo:
+        and    #$0f
+        clc
+        adc    player.note, X
+        sta    player.note, X
+@no_arpeggio:
+
     bbr2   <_al, @l0
         rmb2   <_al
         bbs0    <_al, @noise
@@ -601,11 +626,13 @@ update_psg:
         ora    #%10_0_00000
         sta    psg_ctrl
 @l1:
+    lda     <_al
+    sta     <player.chn_flag, X
+
     ply
     rts
 
 ; [todo] load data
-arpeggio:
 arpeggio_speed:
 portamento_up:
 portamento_down:
@@ -634,6 +661,13 @@ set_instrument:
     iny
     rts
 
+arpeggio:
+    lda    [player.ptr], Y
+    iny
+    ldx    <player.chn
+    sta    player.arpeggio, X
+    rts
+
 enable_noise_channel:
     ldx    <player.chn
     lda    <player.chn_flag, X
@@ -643,7 +677,6 @@ enable_noise_channel:
 
     sta    <player.chn_flag, X 
     rts
-
 
 panning:
     lda    [player.ptr], Y
@@ -715,7 +748,7 @@ note_on:
     iny
     
     ldx    <player.chn
-    sta    player.note, X
+    sta    player.base_note, X
     
     lda    <player.chn_flag, X
     ora    #%0000_0100
