@@ -305,8 +305,7 @@ load_song:
     lda    #high(psg_wavebuf)
     sta    player.wav_upload.dst+1
 
-    ; [todo] load default waveform
-
+    ; read song header
     cly
 @copy_header:
     lda    [_si], Y
@@ -369,6 +368,38 @@ update_matrix:
     sta    <player.current_time_tick+1
 
     inc    player.matrix_pos
+
+
+    ; setup PSG
+    lda    #$ff
+    sta psg_mainvol
+
+    clx
+@psg_init:
+    stx    psg_ch
+    cpx    #4
+    bcc    @no_noise
+        stz    psg_noise
+@no_noise:
+
+    lda    #$ff
+    sta    psg_pan
+
+    lda    #%01_0_00000
+    sta    psg_ctrl
+
+    stz    psg_ctrl
+    
+    lda    player.wav
+    sta    player.wav_upload.src
+    lda    player.wav+1
+    sta    player.wav_upload.src+1
+    jsr    player.wav_upload
+
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    @psg_init
+
     rts
 
 ;;---------------------------------------------------------------------
