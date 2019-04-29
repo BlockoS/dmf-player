@@ -60,6 +60,7 @@ PSG_VOLUME_MAX = $1f ; Maximum volume value
 
     .zp
 _al         .ds 1
+_ah         .ds 1
 _si         .ds 2
 _vdc_reg    .ds 1
 _vdc_ctrl   .ds 1
@@ -92,10 +93,14 @@ player.pattern.hi        .ds PSG_CHAN_COUNT
 player.arpeggio_tick     .ds PSG_CHAN_COUNT
 player.arpeggio_speed    .ds PSG_CHAN_COUNT
 
-
-player.note              .ds PSG_CHAN_COUNT
-player.volume            .ds PSG_CHAN_COUNT
-player.arpeggio          .ds PSG_CHAN_COUNT
+player.note.previous   .ds PSG_CHAN_COUNT
+player.note            .ds PSG_CHAN_COUNT
+player.volume          .ds PSG_CHAN_COUNT
+player.arpeggio        .ds PSG_CHAN_COUNT
+player.frequency.lo    .ds PSG_CHAN_COUNT
+player.frequency.hi    .ds PSG_CHAN_COUNT
+player.frequency.flag  .ds PSG_CHAN_COUNT
+player.frequency.speed .ds PSG_CHAN_COUNT
 
 player.wav_upload       .ds 1 ; tin
 player.wav_upload.src   .ds 2
@@ -358,6 +363,9 @@ load_song:
     sta    player.wav_upload.src+1
     jsr    player.wav_upload
 
+    lda    #$1f
+    sta    player.volume, X
+
     inx
     cpx    #PSG_CHAN_COUNT
     bne    @psg_init
@@ -597,8 +605,32 @@ update_psg:
     sta    <_al
 
     lda    player.note, X
-    ; [todo] instrument arpeggio
     sta    <_note
+
+    lda    player.frequency.flag, X
+    sta    <_ah
+    beq    @no_portamento
+        smb2   <_al
+
+        lsr    <_ah
+        bcc    @portamento.1
+            clc
+            lda    player.frequency.lo, X
+            adc    player.frequency.speed, X 
+            sta    player.frequency.lo, X
+            lda    player.frequency.hi, X
+            adc    #$00
+            sta    player.frequency.hi, X
+            bra    @no_portamento
+@portamento.1:
+            sec
+            lda    player.frequency.lo, X
+            sbc    player.frequency.speed, X 
+            sta    player.frequency.lo, X
+            lda    player.frequency.hi, X
+            sbc    #$00
+            sta    player.frequency.hi, X
+@no_portamento:
 
     ldy    player.arpeggio, X
     beq    @no_arpeggio
@@ -633,11 +665,14 @@ update_psg:
 
     bbr2   <_al, @l0
         rmb2   <_al
-        bbs0    <_al, @noise
+        bbs0   <_al, @noise
             ldy    <_note
             lda    freq_table.lo, Y
+            clc
+            adc    player.frequency.lo, X
             sta    psg_freq.lo
             lda    freq_table.hi, Y
+            adc    player.frequency.hi, X
             sta    psg_freq.hi
             bra    @l0
 @noise:
@@ -661,9 +696,6 @@ update_psg:
     rts
 
 ; [todo] load data
-portamento_up:
-portamento_down:
-portamento_to_note:
 vibrato:
 vibrato_mode:
 vibrato_depth:
@@ -687,7 +719,51 @@ set_instrument:
     lda    [player.ptr], Y
     iny
     rts
-    
+
+portamento_down:
+    stz    player.frequency.lo, X
+    stz    player.frequency.hi, X
+    ldx    <player.chn
+    lda    [player.ptr], Y
+    sta    player.frequency.speed, X 
+    beq    @l0
+        lda    player.frequency.flag, X
+        ora    #%0000_0001
+        sta    player.frequency.flag, X
+        iny
+        rts
+@l0:
+        lda    player.frequency.flag, X
+        and    #%1111_1110
+        sta    player.frequency.flag, X
+        iny
+        rts
+
+portamento_up:
+    stz    player.frequency.lo, X
+    stz    player.frequency.hi, X
+    ldx    <player.chn
+    lda    [player.ptr], Y
+    sta    player.frequency.speed, X 
+    beq    @l0
+        lda    player.frequency.flag, X
+        ora    #%0000_0010
+        sta    player.frequency.flag, X
+        iny
+        rts
+@l0:
+        lda    player.frequency.flag, X
+        and    #%1111_1101
+        sta    player.frequency.flag, X
+        iny
+        rts
+
+portamento_to_note:
+    lda    [player.ptr], Y
+    iny
+    ; [todo]    
+    rts
+
 arpeggio_speed:
     lda    [player.ptr], Y
     iny
@@ -781,16 +857,20 @@ set_wav:
     rts
 
 note_on:
-    lda    [player.ptr], Y
-    iny
-    
     ldx    <player.chn
+    lda    player.note, X
+    sta    player.note.previous, X
+
+    lda    [player.ptr], Y
     sta    player.note, X
+    iny
     
     lda    <player.chn_flag, X
     ora    #%0000_0100
     sta    <player.chn_flag, X 
     
+    stz    player.frequency.lo, X
+    stz    player.frequency.hi, X
     rts
 
 note_off:
@@ -808,7 +888,6 @@ position_jump:
     sta    player.matrix_pos
     smb0   <player.flag
     rts
-
 
     .data
     .bank 1
