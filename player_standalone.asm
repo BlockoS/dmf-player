@@ -750,8 +750,6 @@ set_instrument:
     rts
 
 portamento_down:
-    stz    player.frequency.lo, X
-    stz    player.frequency.hi, X
     ldx    <player.chn
     lda    [player.ptr], Y
     sta    player.frequency.speed, X 
@@ -762,6 +760,8 @@ portamento_down:
         iny
         rts
 @l0:
+        stz    player.frequency.lo, X
+        stz    player.frequency.hi, X
         lda    player.frequency.flag, X
         and    #%1111_1110
         sta    player.frequency.flag, X
@@ -769,8 +769,6 @@ portamento_down:
         rts
 
 portamento_up:
-    stz    player.frequency.lo, X
-    stz    player.frequency.hi, X
     ldx    <player.chn
     lda    [player.ptr], Y
     sta    player.frequency.speed, X 
@@ -781,6 +779,8 @@ portamento_up:
         iny
         rts
 @l0:
+        stz    player.frequency.lo, X
+        stz    player.frequency.hi, X
         lda    player.frequency.flag, X
         and    #%1111_1101
         sta    player.frequency.flag, X
