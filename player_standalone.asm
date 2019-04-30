@@ -99,7 +99,7 @@ player.volume          .ds PSG_CHAN_COUNT
 player.arpeggio        .ds PSG_CHAN_COUNT
 player.frequency.lo    .ds PSG_CHAN_COUNT
 player.frequency.hi    .ds PSG_CHAN_COUNT
-player.frequency.flag  .ds PSG_CHAN_COUNT
+player.frequency.flag  .ds PSG_CHAN_COUNT   ; [todo] rename to player.fx.flag ?
 player.frequency.speed .ds PSG_CHAN_COUNT
 
 player.wav_upload       .ds 1 ; tin
@@ -612,8 +612,7 @@ update_psg:
     beq    @no_portamento
         smb2   <_al
 
-        lsr    <_ah
-        bcc    @portamento.1
+        bbr0   <_ah, @portamento.1
             clc
             lda    player.frequency.lo, X
             adc    player.frequency.speed, X 
@@ -623,6 +622,7 @@ update_psg:
             sta    player.frequency.hi, X
             bra    @no_portamento
 @portamento.1:
+        bbr1   <_ah, @portamento.2
             sec
             lda    player.frequency.lo, X
             sbc    player.frequency.speed, X 
@@ -630,7 +630,36 @@ update_psg:
             lda    player.frequency.hi, X
             sbc    #$00
             sta    player.frequency.hi, X
+            bra    @no_portamento
+@portamento.2:
+    bbr2   <_ah, @portamento.3
+            clc
+            lda    player.frequency.lo, X
+            adc    player.frequency.speed, X 
+            sta    player.frequency.lo, X
+            lda    player.frequency.hi, X
+            adc    #$00
+            sta    player.frequency.hi, X
+            bmi    @no_portamento
+                stz    player.frequency.lo, X
+                stz    player.frequency.hi, X
+                rmb2   <_ah
+            bra    @no_portamento
+@portamento.3:
+            sec
+            lda    player.frequency.lo, X
+            sbc    player.frequency.speed, X 
+            sta    player.frequency.lo, X
+            lda    player.frequency.hi, X
+            sbc    #$00
+            sta    player.frequency.hi, X
+            bpl    @no_portamento
+                stz    player.frequency.lo, X
+                stz    player.frequency.hi, X
+                rmb3   <_ah
 @no_portamento:
+    lda    <_ah
+    sta    player.frequency.flag, X
 
     ldy    player.arpeggio, X
     beq    @no_arpeggio
@@ -759,9 +788,60 @@ portamento_up:
         rts
 
 portamento_to_note:
+    ldx    <player.chn
     lda    [player.ptr], Y
+    sta    player.frequency.speed, X 
+    beq    @skip
+        ; check if we had a new note was triggered
+        lda    <player.chn_flag, X
+        bit    #%0000_0010
+        beq    @skip
+            iny
+            phy
+
+            ldy    player.note.previous, X
+            lda    player.note, X
+            tax
+
+            lda    freq_table.lo, Y
+            sec
+            sbc    freq_table.lo, X
+            pha
+            lda    freq_table.hi, Y
+            sbc    freq_table.hi, X
+
+            ldx    player.chn
+            sta    player.frequency.hi, X
+            pla
+            sta    player.frequency.lo, X
+
+            tya
+            cmp    player.note, X
+            beq    @skip
+            bcc    @l0
+
+                lda    player.frequency.flag, X
+                ora    #%0000_0100
+                sta    player.frequency.flag, X
+            
+                ply
+                rts
+@l0:
+                lda    player.frequency.flag, X
+                ora    #%0000_1000
+                sta    player.frequency.flag, X
+                
+                ply
+                rts 
+@skip:
+    stz    player.frequency.lo, X
+    stz    player.frequency.hi, X
+    
+    lda    player.frequency.flag, X
+    and    #%1111_0011
+    sta    player.frequency.flag, X
+    
     iny
-    ; [todo]    
     rts
 
 arpeggio_speed:
