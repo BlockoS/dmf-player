@@ -59,7 +59,7 @@ PSG_CTRL_FULL_VOLUME    .equ %0011_1111 ; channel maximum volume (bit 5 is unuse
 PSG_VOLUME_MAX = $1f ; Maximum volume value
 
     .zp
-_al         .ds 1
+_al         .ds 1           ; [todo] add _al and _ah to player zp vars
 _ah         .ds 1
 _si         .ds 2
 _vdc_reg    .ds 1
@@ -794,7 +794,7 @@ portamento_to_note:
     beq    @skip
         ; check if we had a new note was triggered
         lda    <player.chn_flag, X
-        bit    #%0000_0010
+        bit    #%0000_0100
         beq    @skip
             iny
             phy
