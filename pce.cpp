@@ -178,7 +178,7 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                 if(pattern_data.note == 100) {
                     _matrix[i].buffer[j].push_back(PCE::NoteOff);
                 }
-                else if(pattern_data.note && pattern_data.octave) {
+                else if(pattern_data.note || pattern_data.octave) {
                     uint8_t dummy;
                     // Let's fix octave and notes...
                     dummy  = (pattern_data.note % 12) & 0x0f;
@@ -216,9 +216,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                             }
                         }
                         last = _matrix[i].buffer[j].size();
-                        if(pattern_data.effect[m].code == DMF::SET_NOISE) {
-                            fprintf(stderr, "%zd %zx %zx NOISE %0x\n", i, j, _matrix[i].packed[j], data);
-                        }
                         _matrix[i].buffer[j].push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
                         _matrix[i].buffer[j].push_back(data);
                     }
