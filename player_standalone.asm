@@ -93,14 +93,16 @@ player.pattern.hi        .ds PSG_CHAN_COUNT
 player.arpeggio_tick     .ds PSG_CHAN_COUNT
 player.arpeggio_speed    .ds PSG_CHAN_COUNT
 
-player.note.previous   .ds PSG_CHAN_COUNT
-player.note            .ds PSG_CHAN_COUNT
-player.volume          .ds PSG_CHAN_COUNT
-player.arpeggio        .ds PSG_CHAN_COUNT
-player.frequency.lo    .ds PSG_CHAN_COUNT
-player.frequency.hi    .ds PSG_CHAN_COUNT
-player.frequency.flag  .ds PSG_CHAN_COUNT   ; [todo] rename to player.fx.flag ?
-player.frequency.speed .ds PSG_CHAN_COUNT
+player.note.previous      .ds PSG_CHAN_COUNT
+player.note               .ds PSG_CHAN_COUNT
+player.volume             .ds PSG_CHAN_COUNT
+player.arpeggio           .ds PSG_CHAN_COUNT
+player.frequency.lo       .ds PSG_CHAN_COUNT
+player.frequency.hi       .ds PSG_CHAN_COUNT
+player.frequency.delta.lo .ds PSG_CHAN_COUNT
+player.frequency.delta.hi .ds PSG_CHAN_COUNT
+player.frequency.flag     .ds PSG_CHAN_COUNT   ; [todo] rename to player.fx.flag ?
+player.frequency.speed    .ds PSG_CHAN_COUNT
 
 player.wav_upload       .ds 1 ; tin
 player.wav_upload.src   .ds 2
@@ -614,48 +616,48 @@ update_psg:
 
         bbr0   <_ah, @portamento.1
             clc
-            lda    player.frequency.lo, X
+            lda    player.frequency.delta.lo, X
             adc    player.frequency.speed, X 
-            sta    player.frequency.lo, X
-            lda    player.frequency.hi, X
+            sta    player.frequency.delta.lo, X
+            lda    player.frequency.delta.hi, X
             adc    #$00
-            sta    player.frequency.hi, X
+            sta    player.frequency.delta.hi, X
             bra    @no_portamento
 @portamento.1:
         bbr1   <_ah, @portamento.2
             sec
-            lda    player.frequency.lo, X
+            lda    player.frequency.delta.lo, X
             sbc    player.frequency.speed, X 
-            sta    player.frequency.lo, X
-            lda    player.frequency.hi, X
+            sta    player.frequency.delta.lo, X
+            lda    player.frequency.delta.hi, X
             sbc    #$00
-            sta    player.frequency.hi, X
+            sta    player.frequency.delta.hi, X
             bra    @no_portamento
 @portamento.2:
     bbr2   <_ah, @portamento.3
             clc
-            lda    player.frequency.lo, X
+            lda    player.frequency.delta.lo, X
             adc    player.frequency.speed, X 
-            sta    player.frequency.lo, X
-            lda    player.frequency.hi, X
+            sta    player.frequency.delta.lo, X
+            lda    player.frequency.delta.hi, X
             adc    #$00
-            sta    player.frequency.hi, X
+            sta    player.frequency.delta.hi, X
             bmi    @no_portamento
-                stz    player.frequency.lo, X
-                stz    player.frequency.hi, X
+                stz    player.frequency.delta.lo, X
+                stz    player.frequency.delta.hi, X
                 rmb2   <_ah
             bra    @no_portamento
 @portamento.3:
             sec
-            lda    player.frequency.lo, X
+            lda    player.frequency.delta.lo, X
             sbc    player.frequency.speed, X 
-            sta    player.frequency.lo, X
-            lda    player.frequency.hi, X
+            sta    player.frequency.delta.lo, X
+            lda    player.frequency.delta.hi, X
             sbc    #$00
-            sta    player.frequency.hi, X
+            sta    player.frequency.delta.hi, X
             bpl    @no_portamento
-                stz    player.frequency.lo, X
-                stz    player.frequency.hi, X
+                stz    player.frequency.delta.lo, X
+                stz    player.frequency.delta.hi, X
                 rmb3   <_ah
 @no_portamento:
     lda    <_ah
@@ -698,10 +700,12 @@ update_psg:
             ldy    <_note
             lda    freq_table.lo, Y
             clc
-            adc    player.frequency.lo, X
+            adc    player.frequency.delta.lo, X
+            sta    player.frequency.lo, X
             sta    psg_freq.lo
             lda    freq_table.hi, Y
-            adc    player.frequency.hi, X
+            adc    player.frequency.delta.hi, X
+            sta    player.frequency.hi, X
             sta    psg_freq.hi
             bra    @l0
 @noise:
@@ -760,8 +764,6 @@ portamento_down:
         iny
         rts
 @l0:
-        stz    player.frequency.lo, X
-        stz    player.frequency.hi, X
         lda    player.frequency.flag, X
         and    #%1111_1110
         sta    player.frequency.flag, X
@@ -779,8 +781,6 @@ portamento_up:
         iny
         rts
 @l0:
-        stz    player.frequency.lo, X
-        stz    player.frequency.hi, X
         lda    player.frequency.flag, X
         and    #%1111_1101
         sta    player.frequency.flag, X
@@ -799,28 +799,37 @@ portamento_to_note:
             iny
             phy
 
-            ldy    player.note.previous, X
-            lda    player.note, X
-            tax
-
-            lda    freq_table.lo, Y
-            sec
-            sbc    freq_table.lo, X
+            lda    player.note.previous, X
             pha
-            lda    freq_table.hi, Y
-            sbc    freq_table.hi, X
-
-            ldx    player.chn
-            sta    player.frequency.hi, X
-            pla
-            sta    player.frequency.lo, X
-
-            tya
             cmp    player.note, X
             beq    @skip
-            bcc    @l0
+            
+            lda    player.frequency.lo, X
+            sta    <_al
+            lda    player.frequency.hi, X
+            sta    <_ah
+            ora    <_al
+            bne    @compute
+                ldy    player.note.previous, X
+                lda    freq_table.lo, Y
+                sta    <_al
+                lda    freq_table.hi, Y
+                sta    <_ah
+@compute:
+            ldy    player.note, X
+            sec
+            lda    <_al
+            sbc    freq_table.lo, Y
+            sta    player.frequency.delta.lo, X
+            lda    <_ah
+            sbc    freq_table.hi, Y
+            sta    player.frequency.delta.hi, X
 
+            pla 
+            cmp    player.note, X
+            bcc    @l0
                 lda    player.frequency.flag, X
+                and    #%1111_0011
                 ora    #%0000_0100
                 sta    player.frequency.flag, X
             
@@ -828,6 +837,7 @@ portamento_to_note:
                 rts
 @l0:
                 lda    player.frequency.flag, X
+                and    #%1111_0011
                 ora    #%0000_1000
                 sta    player.frequency.flag, X
                 
@@ -948,9 +958,13 @@ note_on:
     lda    <player.chn_flag, X
     ora    #%0000_0100
     sta    <player.chn_flag, X 
-    
-    stz    player.frequency.lo, X
-    stz    player.frequency.hi, X
+   
+    lda    player.frequency.flag, X
+    bit    #%0000_1100
+    bne    @l0
+        stz    player.frequency.delta.lo, X
+        stz    player.frequency.delta.hi, X
+@l0:
     rts
 
 note_off:
