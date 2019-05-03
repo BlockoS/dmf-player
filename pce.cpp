@@ -181,8 +181,8 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                 else if(pattern_data.note || pattern_data.octave) {
                     uint8_t dummy;
                     // Let's fix octave and notes...
-                    dummy  = (pattern_data.note % 12) & 0x0f;
-                    dummy |= ((pattern_data.octave + (dummy ? 1 : 2)) & 0x0f) << 4;
+                    dummy  = pattern_data.note % 12;
+                    dummy += (pattern_data.octave + (dummy ? 1 : 2)) * 12;
                     _matrix[i].buffer[j].push_back(PCE::Note);
                     _matrix[i].buffer[j].push_back(dummy);
                 }

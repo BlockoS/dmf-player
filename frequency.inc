@@ -12,7 +12,6 @@ freq_table.hi0:
 	.db $0f
 	.db $0f
 	.db $0e
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi1:
 	.db $0d
 	.db $0c
@@ -26,7 +25,6 @@ freq_table.hi1:
 	.db $07
 	.db $07
 	.db $07
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi2:
 	.db $06
 	.db $06
@@ -40,7 +38,6 @@ freq_table.hi2:
 	.db $03
 	.db $03
 	.db $03
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi3:
 	.db $03
 	.db $03
@@ -54,7 +51,6 @@ freq_table.hi3:
 	.db $01
 	.db $01
 	.db $01
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi4:
 	.db $01
 	.db $01
@@ -68,7 +64,6 @@ freq_table.hi4:
 	.db $00
 	.db $00
 	.db $00
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi5:
 	.db $00
 	.db $00
@@ -82,7 +77,6 @@ freq_table.hi5:
 	.db $00
 	.db $00
 	.db $00
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi6:
 	.db $00
 	.db $00
@@ -96,7 +90,6 @@ freq_table.hi6:
 	.db $00
 	.db $00
 	.db $00
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi7:
 	.db $00
 	.db $00
@@ -110,7 +103,6 @@ freq_table.hi7:
 	.db $00
 	.db $00
 	.db $00
-    .db $00, $00, $00, $00              ; filler
 freq_table.hi8:
 	.db $00
 	.db $00
@@ -124,7 +116,6 @@ freq_table.hi8:
 	.db $00
 	.db $00
 	.db $00
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo:
 freq_table.lo0:
 	.db $ba
@@ -139,7 +130,6 @@ freq_table.lo0:
 	.db $e4
 	.db $00
 	.db $28
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo1:
 	.db $5d
 	.db $9d
@@ -153,7 +143,6 @@ freq_table.lo1:
 	.db $f2
 	.db $80
 	.db $14
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo2:
 	.db $ae
 	.db $4e
@@ -167,7 +156,6 @@ freq_table.lo2:
 	.db $f9
 	.db $c0
 	.db $8a
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo3:
 	.db $57
 	.db $27
@@ -181,7 +169,6 @@ freq_table.lo3:
 	.db $fc
 	.db $e0
 	.db $c5
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo4:
 	.db $ab
 	.db $93
@@ -195,7 +182,6 @@ freq_table.lo4:
 	.db $fe
 	.db $f0
 	.db $e2
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo5:
 	.db $d5
 	.db $c9
@@ -209,7 +195,6 @@ freq_table.lo5:
 	.db $7f
 	.db $78
 	.db $71
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo6:
 	.db $6a
 	.db $64
@@ -223,7 +208,6 @@ freq_table.lo6:
 	.db $3f
 	.db $3c
 	.db $38
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo7:
 	.db $35
 	.db $32
@@ -237,7 +221,6 @@ freq_table.lo7:
 	.db $1f
 	.db $1e
 	.db $1c
-    .db $00, $00, $00, $00              ; filler
 freq_table.lo8:
 	.db $1a
 	.db $19

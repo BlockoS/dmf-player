@@ -4,8 +4,7 @@
 ;;---------------------------------------------------------------------
 
 
-; base time = time base
-; time even / time odd = tick time 1 / tick time 2
+; [todo] instruments
 
 
 ; VDC (Video Display Controller)
@@ -690,6 +689,7 @@ update_psg:
         clc
         adc    <_note
         sta    <_note
+; [todo] inc octave
 @arpeggio.0
         inc    <player.current_arpeggio_tick, X
 @no_arpeggio:
