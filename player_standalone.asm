@@ -5,7 +5,11 @@
 
 
 ; [todo] instruments
-
+;           => arpeggio
+;           => wave macro 
+;        effects:
+;           => vibrato
+;           => voluume slide
 
 ; VDC (Video Display Controller)
 videoport    .equ $0000
@@ -65,6 +69,9 @@ _vdc_reg    .ds 1
 _vdc_ctrl   .ds 1
 _vsync_cnt  .ds 1
 
+mul8.lo .ds 4
+mul8.hi .ds 4
+
 player.chn                      .ds 1
 player.pattern_pos              .ds 1
 player.ptr                      .ds 2
@@ -75,6 +82,7 @@ player.chn_flag                 .ds PSG_CHAN_COUNT
 player.current_arpeggio_tick    .ds PSG_CHAN_COUNT
 
 _note .ds 1
+_volume .ds 1
 
     .bss
 player.infos:
@@ -102,6 +110,20 @@ player.frequency.delta.lo .ds PSG_CHAN_COUNT
 player.frequency.delta.hi .ds PSG_CHAN_COUNT
 player.frequency.flag     .ds PSG_CHAN_COUNT   ; [todo] rename to player.fx.flag ?
 player.frequency.speed    .ds PSG_CHAN_COUNT
+
+player.instrument.flag .ds PSG_CHAN_COUNT 
+
+player.instrument.vol.size .ds PSG_CHAN_COUNT
+player.instrument.vol.loop .ds PSG_CHAN_COUNT
+player.instrument.vol.lo   .ds PSG_CHAN_COUNT
+player.instrument.vol.hi   .ds PSG_CHAN_COUNT
+player.instrument.vol.idx  .ds PSG_CHAN_COUNT
+
+player.instrument.arp.size .ds PSG_CHAN_COUNT
+player.instrument.arp.loop .ds PSG_CHAN_COUNT
+player.instrument.arp.lo   .ds PSG_CHAN_COUNT
+player.instrument.arp.hi   .ds PSG_CHAN_COUNT
+player.instrument.arp.idx  .ds PSG_CHAN_COUNT
 
 player.wav_upload       .ds 1 ; tin
 player.wav_upload.src   .ds 2
@@ -277,6 +299,15 @@ irq_reset:
     cpx    #PSG_CHAN_COUNT
     bne    .l1
 
+    lda    #high(sqr0.lo)
+    sta    <mul8.lo+1
+    lda    #high(sqr1.lo)
+    sta    <mul8.lo+3
+    lda    #high(sqr0.hi)
+    sta    <mul8.hi+1
+    lda    #high(sqr1.hi)
+    sta    <mul8.hi+3
+
     lda    #bank(song)
     tam    #page(song)
     lda    #low(song)
@@ -306,6 +337,20 @@ irq_reset:
 
     bra    .loop
 
+mul8:
+    sta    <mul8.lo
+    sta    <mul8.hi
+    eor    #$ff
+    sta    <mul8.lo+2
+    sta    <mul8.hi+2
+
+    sec
+    lda    [mul8.lo  ], Y
+    sbc    [mul8.lo+2], Y
+    tax
+    lda    [mul8.hi  ], Y
+    sbc    [mul8.hi+2], Y
+    rts
 
 ;;---------------------------------------------------------------------
 ; name : load_song
@@ -608,6 +653,54 @@ update_psg:
     lda    player.note, X
     sta    <_note
 
+    ; -- instrument arpeggio
+    ; [todo]
+
+    ; -- instrument volume
+    lda    player.instrument.flag, X
+    bit    #%0000_0001 
+    beq    @std_volume
+
+    ldy    player.instrument.vol.idx, X
+    lda    player.instrument.vol.lo, X
+    sta    <_si
+    lda    player.instrument.vol.hi, X
+    sta    <_si+1
+    lda    [_si], Y
+    inc    A
+    ldy    player.volume, X
+    phx
+    jsr    mul8
+    lsr    A
+    sta    <_volume
+    plx
+
+    inc    player.instrument.vol.idx, X
+    lda    player.instrument.vol.idx, X
+    cmp    player.instrument.vol.size, X
+    bcc    @no_reset
+        lda    player.instrument.vol.loop, X
+        cmp    #$ff
+        bne    @reset
+            lda    player.instrument.flag, X
+            and    #%1111_1110
+            sta    player.instrument.flag, X
+            cla
+@reset:
+        sta    player.instrument.vol.idx, X
+@no_reset:
+    
+    smb1   <_al
+    bra    @no_volume
+@std_volume:
+    bbr1   <_al, @no_volume
+    lda    player.volume, X
+    lsr    A
+    lsr    A
+    sta    <_volume
+@no_volume:
+
+    ; -- portamento
     lda    player.frequency.flag, X
     sta    <_ah
     beq    @no_portamento
@@ -672,6 +765,7 @@ update_psg:
 
         tya
 
+        ; -- arpeggio
         smb2   <_al
         ldy    <player.current_arpeggio_tick, X
         beq    @arpeggio.0
@@ -689,11 +783,11 @@ update_psg:
         clc
         adc    <_note
         sta    <_note
-; [todo] inc octave
 @arpeggio.0
         inc    <player.current_arpeggio_tick, X
 @no_arpeggio:
 
+    ; -- set frequency
     bbr2   <_al, @l0
         rmb2   <_al
         bbs0   <_al, @noise
@@ -715,11 +809,10 @@ update_psg:
             lda    noise_table, Y 
             sta    psg_noise
 @l0:
+    ; -- volume
     bbr1   <_al, @l1
         rmb1    <_al
-        lda    player.volume, X
-        lsr    A
-        lsr    A
+        lda    <_volume
         ora    #%10_0_00000
         sta    psg_ctrl
 @l1:
@@ -748,9 +841,120 @@ sync_signal:
 fine_tune:
 global_fine_tune:
 set_sample_bank:
+    lda    [player.ptr], Y
+    iny
+    rts
+
 set_instrument:
     lda    [player.ptr], Y
     iny
+
+    clc
+    adc    player.instruments
+    sta    <_si
+    cla
+    adc    player.instruments+1
+    sta    <_si+1
+
+    ldx    <player.chn
+    
+    lda    [_si]
+    sta    player.instrument.vol.size, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+
+    lda    [_si]
+    sta    player.instrument.vol.loop, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+    
+    lda    [_si]
+    sta    player.instrument.vol.lo, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+    
+    lda    [_si]
+    sta    player.instrument.vol.hi, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+
+    lda    [_si]
+    sta    player.instrument.arp.size, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+
+    lda    [_si]
+    sta    player.instrument.arp.loop, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+    
+    lda    [_si]
+    sta    player.instrument.arp.lo, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+    
+    lda    [_si]
+    sta    player.instrument.arp.hi, X
+    lda    <_si
+    clc
+    adc    player.instrument_count
+    sta    <_si
+    cla
+    adc    <_si+1
+    sta    <_si+1
+    
+    ; [todo] wave macro
+
+    stz    player.instrument.vol.idx, X
+    stz    player.instrument.arp.idx, X
+
+    cla
+    phy
+    ldy    player.instrument.vol.size, X
+    beq    @no_vol
+        ora    #%0000_0001
+@no_vol:
+    ldy    player.instrument.arp.size, X
+    beq    @no_arp
+        ora    #%0000_0010
+@no_arp:
+    sta    player.instrument.flag, X
+    ply
     rts
 
 portamento_down:
@@ -956,15 +1160,17 @@ note_on:
     iny
     
     lda    <player.chn_flag, X
-    ora    #%0000_0100
+    ora    #%0000_0110
     sta    <player.chn_flag, X 
-   
+  
     lda    player.frequency.flag, X
     bit    #%0000_1100
     bne    @l0
         stz    player.frequency.delta.lo, X
         stz    player.frequency.delta.hi, X
 @l0:
+    stz    player.instrument.vol.idx, X
+    stz    player.instrument.arp.idx, X
     rts
 
 note_off:
@@ -982,6 +1188,10 @@ position_jump:
     sta    player.matrix_pos
     smb0   <player.flag
     rts
+
+    ; Align to 256
+    .org (* + $ff) & $ff00
+    .include "mul.inc"
 
     .data
     .bank 1
