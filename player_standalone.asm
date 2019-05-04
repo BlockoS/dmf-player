@@ -103,6 +103,7 @@ player.arpeggio_speed    .ds PSG_CHAN_COUNT
 player.note.previous      .ds PSG_CHAN_COUNT
 player.note               .ds PSG_CHAN_COUNT
 player.volume             .ds PSG_CHAN_COUNT
+player.volume.delta       .ds PSG_CHAN_COUNT
 player.arpeggio           .ds PSG_CHAN_COUNT
 player.frequency.lo       .ds PSG_CHAN_COUNT
 player.frequency.hi       .ds PSG_CHAN_COUNT
@@ -409,8 +410,9 @@ load_song:
     sta    player.wav_upload.src+1
     jsr    player.wav_upload
 
-    lda    #$1f
+    lda    #$7c
     sta    player.volume, X
+    stz    player.volume.delta, X
 
     inx
     cpx    #PSG_CHAN_COUNT
@@ -652,7 +654,7 @@ update_psg:
 
     lda    player.note, X
     sta    <_note
-
+    
     ; -- instrument arpeggio
     ; [todo]
 
@@ -816,6 +818,26 @@ update_psg:
         ora    #%10_0_00000
         sta    psg_ctrl
 @l1:
+    
+    ; -- volume slide
+    lda    player.volume, X
+    bbr3   <_al, @no_volume_slide
+        smb1   <_al
+        clc
+        adc    player.volume.delta, X
+        bpl    @vol.plus
+            cla
+            rmb3   <_al
+            bra    @no_volume_slide
+@vol.plus:
+        cmp    #$7c
+        bcc    @no_volume_slide
+            lda    #$7c
+            rmb3   <_al
+@no_volume_slide:
+    sta    player.volume, X
+    sta    <_volume
+    
     lda     <_al
     sta     <player.chn_flag, X
 
@@ -829,7 +851,6 @@ port_to_note_vol_slide:
 vibrato_vol_slide:
 tremolo:
 set_speed_value1:
-volume_slide:
 retrig:
 set_speed_value2:
 set_LFO_mode:
@@ -844,6 +865,20 @@ set_sample_bank:
     lda    [player.ptr], Y
     iny
     rts
+
+volume_slide:
+    lda    [player.ptr], Y
+    iny
+    
+    ldx    <player.chn
+    sta    player.volume.delta, X
+
+    lda    <player.chn_flag, X
+    ora    #%0000_1000
+    sta    <player.chn_flag, X
+
+    rts
+
 
 set_instrument:
     lda    [player.ptr], Y
