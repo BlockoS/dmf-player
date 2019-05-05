@@ -4,8 +4,7 @@
 ;;---------------------------------------------------------------------
 
 
-; [todo] instruments
-;           => wave macro = load wav 
+; [todo]
 ;        effects:
 ;           => vibrato
 
@@ -309,6 +308,8 @@ irq_reset:
 
     lda    #bank(song)
     tam    #page(song)
+    inc    A
+    tam    #(page(song)+1)
     lda    #low(song)
     sta    <_si
     lda    #high(song)

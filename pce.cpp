@@ -197,6 +197,12 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                     last = _matrix[i].buffer[j].size();
                     _matrix[i].buffer[j].push_back(PCE::SetInstrument);
                     _matrix[i].buffer[j].push_back(pattern_data.instrument);
+                
+                    if(song.instrument[pattern_data.instrument].std.wave.size) {
+                        last = _matrix[i].buffer[j].size();
+                        _matrix[i].buffer[j].push_back(PCE::SetWave);
+                        _matrix[i].buffer[j].push_back(song.instrument[pattern_data.instrument].std.wave.value[0]);
+                    }
                 }
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
