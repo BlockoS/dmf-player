@@ -5,11 +5,9 @@
 
 
 ; [todo] instruments
-;           => arpeggio
-;           => wave macro 
+;           => wave macro = load wav 
 ;        effects:
 ;           => vibrato
-;           => voluume slide
 
 ; VDC (Video Display Controller)
 videoport    .equ $0000
@@ -656,7 +654,68 @@ update_psg:
     sta    <_note
     
     ; -- instrument arpeggio
-    ; [todo]
+    lda    player.instrument.flag, X
+    bit    #%0000_0010 
+    beq    @no_arp
+
+    ldy    player.instrument.arp.idx, X
+    lda    player.instrument.arp.lo, X
+    sta    <_si
+    lda    player.instrument.arp.hi, X
+    sta    <_si+1
+    lda    [_si], Y
+    clc
+    adc    <_note
+    sta    <_note
+
+    inc    player.instrument.arp.idx, X
+    lda    player.instrument.arp.idx, X
+    cmp    player.instrument.arp.size, X
+    bcc    @no_arp.reset
+        lda    player.instrument.arp.loop, X
+        cmp    #$ff
+        bne    @arp.reset
+            lda    player.instrument.flag, X
+            and    #%1111_1101
+            sta    player.instrument.flag, X
+            cla
+@arp.reset:
+        sta    player.instrument.arp.idx, X
+@no_arp.reset:
+    ;smb2   <_al
+@no_arp:
+    
+    ; -- arpeggio
+    ldy    player.arpeggio, X
+    beq    @no_arpeggio
+        dec    player.arpeggio_tick, X
+        bne    @no_arpeggio
+
+        lda    player.arpeggio_speed, X
+        sta    player.arpeggio_tick, X
+
+        tya
+
+        smb2   <_al
+        ldy    <player.current_arpeggio_tick, X
+        beq    @arpeggio.0
+        dey
+        beq   @arpeggio.1
+@arpeggio.2:
+            ldy    #$ff
+            sty    <player.current_arpeggio_tick, X
+            lsr    A
+            lsr    A
+            lsr    A
+            lsr    A
+@arpeggio.1:
+        and    #$0f
+        clc
+        adc    player.note, X
+        sta    <_note
+@arpeggio.0
+        inc    <player.current_arpeggio_tick, X
+@no_arpeggio:
 
     ; -- instrument volume
     lda    player.instrument.flag, X
@@ -680,17 +739,17 @@ update_psg:
     inc    player.instrument.vol.idx, X
     lda    player.instrument.vol.idx, X
     cmp    player.instrument.vol.size, X
-    bcc    @no_reset
+    bcc    @no_volume.reset
         lda    player.instrument.vol.loop, X
         cmp    #$ff
-        bne    @reset
+        bne    @volume.reset
             lda    player.instrument.flag, X
             and    #%1111_1110
             sta    player.instrument.flag, X
             cla
-@reset:
+@volume.reset:
         sta    player.instrument.vol.idx, X
-@no_reset:
+@no_volume.reset:
     
     smb1   <_al
     bra    @no_volume
@@ -756,38 +815,7 @@ update_psg:
 @no_portamento:
     lda    <_ah
     sta    player.frequency.flag, X
-
-    ldy    player.arpeggio, X
-    beq    @no_arpeggio
-        dec    player.arpeggio_tick, X
-        bne    @no_arpeggio
-
-        lda    player.arpeggio_speed, X
-        sta    player.arpeggio_tick, X
-
-        tya
-
-        ; -- arpeggio
-        smb2   <_al
-        ldy    <player.current_arpeggio_tick, X
-        beq    @arpeggio.0
-        dey
-        beq   @arpeggio.1
-@arpeggio.2:
-            ldy    #$ff
-            sty    <player.current_arpeggio_tick, X
-            lsr    A
-            lsr    A
-            lsr    A
-            lsr    A
-@arpeggio.1:
-        and    #$0f
-        clc
-        adc    <_note
-        sta    <_note
-@arpeggio.0
-        inc    <player.current_arpeggio_tick, X
-@no_arpeggio:
+        
 
     ; -- set frequency
     bbr2   <_al, @l0
@@ -798,10 +826,35 @@ update_psg:
             clc
             adc    player.frequency.delta.lo, X
             sta    player.frequency.lo, X
-            sta    psg_freq.lo
             lda    freq_table.hi, Y
             adc    player.frequency.delta.hi, X
             sta    player.frequency.hi, X
+            bne    @check.lo
+@check.hi:
+            lda    player.frequency.lo, X
+            cmp    #$16
+            bcs    @freq.set
+                lda    #$16
+                sta    player.frequency.lo, X
+                bra    @freq.delta.reset
+@check.lo:
+            cmp    #$1b
+            bcc    @freq.set
+                lda    #$1a
+                sta    player.frequency.hi, X
+                lda    #$ba
+                sta    player.frequency.lo, X
+@freq.delta.reset:
+                sec
+                sbc    freq_table.lo, Y
+                sta    player.frequency.delta.lo, X
+                lda    player.frequency.hi, X
+                sbc    freq_table.hi, Y
+                sta    player.frequency.delta.hi, X
+@freq.set:
+            lda    player.frequency.lo, X
+            sta    psg_freq.lo
+            lda    player.frequency.hi, X
             sta    psg_freq.hi
             bra    @l0
 @noise:
@@ -815,7 +868,9 @@ update_psg:
     bbr1   <_al, @l1
         rmb1    <_al
         lda    <_volume
-        ora    #%10_0_00000
+        beq    @skip
+            ora    #%10_0_00000
+@skip:
         sta    psg_ctrl
 @l1:
     
@@ -1127,16 +1182,33 @@ panning:
     rts
 
 set_volume:
-    lda    [player.ptr], Y
-    iny
     ldx    <player.chn
-    sta    player.volume, X
-    
     lda    <player.chn_flag, X
     ora    #%0000_0010
     sta    <player.chn_flag, X 
     
+    lda    [player.ptr], Y
+    pha
+    iny
+    sta    player.volume, X
+    
+    pla
+    beq    note_off
     rts
+
+note_off:
+    stz    psg_ctrl
+   
+    ldx    <player.chn
+    stz    <player.chn_flag, X
+    stz    player.frequency.flag, X
+    stz    player.instrument.vol.idx, X
+    stz    player.instrument.arp.idx, X
+    stz    player.frequency.delta.lo, X
+    stz    player.frequency.delta.hi, X
+    
+    rts
+
 
 set_wav:
     ; Reset write index
@@ -1174,15 +1246,19 @@ set_wav:
 
     lda    #%01_0_00000
     sta    psg_ctrl
-
+ 
     ; Restore channel volume
-    ldx    <player.chn
-    lda    player.volume, X
-    lsr    A
-    lsr    A
-    ora    #%10_0_00000
-    sta    psg_ctrl
-    
+    lda    <player.chn_flag, X
+    beq    @mute
+        ldx    <player.chn
+        lda    player.volume, X
+        lsr    A
+        lsr    A
+        ora    #%10_0_00000
+        sta    psg_ctrl
+        rts
+@mute:
+    stz    psg_ctrl
     rts
 
 note_on:
@@ -1206,10 +1282,6 @@ note_on:
 @l0:
     stz    player.instrument.vol.idx, X
     stz    player.instrument.arp.idx, X
-    rts
-
-note_off:
-    stz    psg_ctrl
     rts
 
 pattern_break:

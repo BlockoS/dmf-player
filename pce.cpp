@@ -200,9 +200,10 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                 }
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
-                    if((pattern_data.effect[m].code != 0xffff) && (pattern_data.effect[m].data != 0xffff)) {
+                    if(pattern_data.effect[m].code != 0xffff) {
                         uint8_t data;
-                        data = pattern_data.effect[m].data;
+                        data = (pattern_data.effect[m].data != 0xffff) ? pattern_data.effect[m].data : 0x00;
+
                         // Preprocess / fix
                         // - Volume slide
                         if(pattern_data.effect[m].code == 0x0A) {
