@@ -3,11 +3,6 @@
 ; See the accompanying LICENSE file for terms.
 ;;---------------------------------------------------------------------
 
-
-; [todo]
-;        effects:
-;           => vibrato
-
 ; VDC (Video Display Controller)
 videoport    .equ $0000
 
@@ -77,10 +72,13 @@ player.flag                     .ds 1
 player.current_time_tick        .ds 2
 player.chn_flag                 .ds PSG_CHAN_COUNT
 player.current_arpeggio_tick    .ds PSG_CHAN_COUNT
+player.r0                       .ds 2
+player.r1                       .ds 2
 
-_note .ds 1
+_note   .ds 1
 _volume .ds 1
-
+_freq   .ds 2
+    
     .bss
 player.infos:
 player.time_base         .ds 1
@@ -108,6 +106,8 @@ player.frequency.delta.lo .ds PSG_CHAN_COUNT
 player.frequency.delta.hi .ds PSG_CHAN_COUNT
 player.frequency.flag     .ds PSG_CHAN_COUNT   ; [todo] rename to player.fx.flag ?
 player.frequency.speed    .ds PSG_CHAN_COUNT
+player.vibrato            .ds PSG_CHAN_COUNT
+player.vibrato.tick       .ds PSG_CHAN_COUNT
 
 player.instrument.flag .ds PSG_CHAN_COUNT 
 
@@ -317,6 +317,14 @@ irq_reset:
     jsr    load_song
 
     cli
+    
+    sec
+    lda    freq_table.lo0
+    sbc    freq_table.lo0+1
+    sta    <_al
+    lda    freq_table.hi0
+    sbc    freq_table.hi0+1
+    sta    <_ah
 
 .loop:
     stz    <_vsync_cnt
@@ -653,7 +661,7 @@ update_psg:
 
     lda    player.note, X
     sta    <_note
-    
+
     ; -- instrument arpeggio
     lda    player.instrument.flag, X
     bit    #%0000_0010 
@@ -816,7 +824,16 @@ update_psg:
 @no_portamento:
     lda    <_ah
     sta    player.frequency.flag, X
-        
+    
+    lda    player.frequency.delta.lo, X
+    sta    <_freq
+    lda    player.frequency.delta.hi, X
+    sta    <_freq+1
+
+    ; -- vibrato
+    bbr4   <_al, @no_vibrato
+        jsr    update_vibrato
+@no_vibrato:
 
     ; -- set frequency
     bbr2   <_al, @l0
@@ -825,10 +842,10 @@ update_psg:
             ldy    <_note
             lda    freq_table.lo, Y
             clc
-            adc    player.frequency.delta.lo, X
+            adc    <_freq
             sta    player.frequency.lo, X
             lda    freq_table.hi, Y
-            adc    player.frequency.delta.hi, X
+            adc    <_freq+1
             sta    player.frequency.hi, X
             bne    @check.lo
 @check.hi:
@@ -899,8 +916,126 @@ update_psg:
 
     rts
 
+update_vibrato:
+    smb2   <_al
+    
+    lda    player.vibrato, X
+    and    #$0f
+    pha
+        
+    lda    player.vibrato.tick, X
+    asl    A
+    asl    A
+    tay
+    
+    lda    sin_table, Y
+    sec
+    sbc    #$10
+    sta    <player.r1+1
+    bpl    @plus
+@neg:
+    eor    #$ff
+    inc    A
+    pha 
+
+    ldy    <_note
+    lda    freq_table.lo-1, Y
+    sec
+    sbc    freq_table.lo, Y
+    sta    <player.r0
+    lda    freq_table.hi-1, Y
+    sbc    freq_table.hi, Y
+    sta    <player.r0+1
+    bra    @go
+@plus:
+    pha
+
+    ldy    <_note
+    lda    freq_table.lo, Y
+    sec
+    sbc    freq_table.lo+1, Y
+    sta    <player.r0
+    lda    freq_table.hi, Y
+    sbc    freq_table.hi+1, Y
+    sta    <player.r0+1
+@go:
+    pla
+    sta    <mul8.lo
+    eor    #$ff
+    sta    <mul8.lo+2
+
+    ply
+    sec
+    lda    [mul8.lo  ], Y
+    sbc    [mul8.lo+2], Y
+
+    sta    <mul8.lo
+    sta    <mul8.hi
+    eor    #$ff
+    sta    <mul8.lo+2
+    sta    <mul8.hi+2
+
+    ldy    <player.r0
+    sec
+    ;    lda    [mul8.lo  ], Y
+    ;    sbc    [mul8.lo+2], Y           ; [todo] keep it?
+    ;    tax
+    lda    [mul8.hi  ], Y
+    sbc    [mul8.hi+2], Y
+    sta    <player.r0
+
+    ldy    <player.r0+1
+    sec
+    lda    [mul8.lo  ], Y
+    sbc    [mul8.lo+2], Y
+    tax
+    lda    [mul8.hi  ], Y
+    sbc    [mul8.hi+2], Y
+    
+    sax
+    clc
+    adc    <player.r0
+    sta    <player.r0
+    sax
+    adc    #0
+    sta    <player.r0+1
+    
+    ldy    <player.r1+1
+    bpl    @l0
+@sub:
+        eor    #$ff
+        sax
+        eor    #$ff
+        sax
+        inx
+        bne    @l0
+            inc   A
+@l0:
+
+    clc
+    sax
+    ldy    <player.chn
+    clc
+    adc    <_freq
+    sta    <_freq
+    sax
+    adc    <_freq+1
+    sta    <_freq+1
+       
+    lda    player.vibrato, Y
+    lsr    A
+    lsr    A
+    lsr    A
+    lsr    A
+    clc
+    adc    player.vibrato.tick, Y
+    sta    player.vibrato.tick, Y
+    
+    sxy
+
+    rts
+
 ; [todo] load data
-vibrato:
 vibrato_mode:
 vibrato_depth:
 port_to_note_vol_slide:
@@ -919,6 +1054,28 @@ fine_tune:
 global_fine_tune:
 set_sample_bank:
     lda    [player.ptr], Y
+    iny
+    rts
+
+vibrato:
+    lda    [player.ptr], Y
+    bne    @l0
+        lda    <player.chn_flag, X
+        and    #%1110_1111
+        sta    <player.chn_flag, X
+
+        iny
+        rts
+@l0:
+    ldx    <player.chn
+    sta    player.vibrato, X
+
+    stz    player.vibrato.tick, X
+
+    lda    <player.chn_flag, X
+    ora    #%0001_0000
+    sta    <player.chn_flag, X
+
     iny
     rts
 
@@ -1300,6 +1457,8 @@ position_jump:
     ; Align to 256
     .org (* + $ff) & $ff00
     .include "mul.inc"
+    .include "sin.inc"
+player_end:
 
     .data
     .bank 1
