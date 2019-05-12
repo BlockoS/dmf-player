@@ -54,8 +54,6 @@ PSG_CTRL_FULL_VOLUME    .equ %0011_1111 ; channel maximum volume (bit 5 is unuse
 PSG_VOLUME_MAX = $1f ; Maximum volume value
 
     .zp
-_al         .ds 1           ; [todo] add _al and _ah to player zp vars
-_ah         .ds 1
 _si         .ds 2
 _vdc_reg    .ds 1
 _vdc_ctrl   .ds 1
@@ -72,6 +70,10 @@ player.flag                     .ds 1
 player.current_time_tick        .ds 2
 player.chn_flag                 .ds PSG_CHAN_COUNT
 player.current_arpeggio_tick    .ds PSG_CHAN_COUNT
+player.ax:
+player.ah                       .ds 1
+player.al                       .ds 1
+player.si                       .ds 2
 player.r0                       .ds 2
 player.r1                       .ds 2
 
@@ -318,14 +320,6 @@ irq_reset:
 
     cli
     
-    sec
-    lda    freq_table.lo0
-    sbc    freq_table.lo0+1
-    sta    <_al
-    lda    freq_table.hi0
-    sbc    freq_table.hi0+1
-    sta    <_ah
-
 .loop:
     stz    <_vsync_cnt
 @wait_vsync:
@@ -434,37 +428,37 @@ update_matrix:
         stz    player.matrix_pos
 @l0:
     lda    player.matrix
-    sta    <_si
+    sta    <player.si
     
     lda    player.matrix+1
-    sta    <_si+1
+    sta    <player.si+1
     
     stz    player.pattern_pos
 
     ldy    player.matrix_pos
     clx
 @set_pattern_ptr:
-    lda    [_si], Y
+    lda    [player.si], Y
     sta    player.pattern.lo, X
 
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.matrix_rows
-    sta    <_si
-    lda    <_si+1
+    sta    <player.si
+    lda    <player.si+1
     adc    #$00
-    sta    <_si+1
+    sta    <player.si+1
 
-    lda    [_si], Y
+    lda    [player.si], Y
     sta    player.pattern.hi, X
 
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.matrix_rows
-    sta    <_si
-    lda    <_si+1
+    sta    <player.si
+    lda    <player.si+1
     adc    #$00
-    sta    <_si+1
+    sta    <player.si+1
     
     stz    <player.rest, X
     
@@ -657,7 +651,7 @@ update_psg:
     stx    <player.chn
     stx    psg_ch
     lda    <player.chn_flag, X
-    sta    <_al
+    sta    <player.al
 
     lda    player.note, X
     sta    <_note
@@ -669,10 +663,10 @@ update_psg:
 
     ldy    player.instrument.arp.idx, X
     lda    player.instrument.arp.lo, X
-    sta    <_si
+    sta    <player.si
     lda    player.instrument.arp.hi, X
-    sta    <_si+1
-    lda    [_si], Y
+    sta    <player.si+1
+    lda    [player.si], Y
     sec
     sbc    #$0C
     clc
@@ -693,7 +687,7 @@ update_psg:
 @arp.reset:
         sta    player.instrument.arp.idx, X
 @no_arp.reset:
-    ;smb2   <_al
+    ;smb2   <player.al
 @no_arp:
     
     ; -- arpeggio
@@ -707,7 +701,7 @@ update_psg:
 
         tya
 
-        smb2   <_al
+        smb2   <player.al
         ldy    <player.current_arpeggio_tick, X
         beq    @arpeggio.0
         dey
@@ -734,10 +728,10 @@ update_psg:
     beq    @std_volume
         ldy    player.instrument.vol.idx, X
         lda    player.instrument.vol.lo, X
-        sta    <_si
+        sta    <player.si
         lda    player.instrument.vol.hi, X
-        sta    <_si+1
-        lda    [_si], Y
+        sta    <player.si+1
+        lda    [player.si], Y
         inc    A
         ldy    player.volume, X
         phx
@@ -760,10 +754,10 @@ update_psg:
 @volume.reset:
             sta    player.instrument.vol.idx, X
 @no_volume.reset:
-        smb1   <_al
+        smb1   <player.al
         bra    @no_volume
 @std_volume:
-    bbr1   <_al, @no_volume
+    bbr1   <player.al, @no_volume
     lda    player.volume, X
     lsr    A
     lsr    A
@@ -772,11 +766,11 @@ update_psg:
 
     ; -- portamento
     lda    player.frequency.flag, X
-    sta    <_ah
+    sta    <player.ah
     beq    @no_portamento
-        smb2   <_al
+        smb2   <player.al
 
-        bbr0   <_ah, @portamento.1
+        bbr0   <player.ah, @portamento.1
             clc
             lda    player.frequency.delta.lo, X
             adc    player.frequency.speed, X 
@@ -786,7 +780,7 @@ update_psg:
             sta    player.frequency.delta.hi, X
             bra    @no_portamento
 @portamento.1:
-        bbr1   <_ah, @portamento.2
+        bbr1   <player.ah, @portamento.2
             sec
             lda    player.frequency.delta.lo, X
             sbc    player.frequency.speed, X 
@@ -796,7 +790,7 @@ update_psg:
             sta    player.frequency.delta.hi, X
             bra    @no_portamento
 @portamento.2:
-    bbr2   <_ah, @portamento.3
+    bbr2   <player.ah, @portamento.3
             clc
             lda    player.frequency.delta.lo, X
             adc    player.frequency.speed, X 
@@ -807,7 +801,7 @@ update_psg:
             bmi    @no_portamento
                 stz    player.frequency.delta.lo, X
                 stz    player.frequency.delta.hi, X
-                rmb2   <_ah
+                rmb2   <player.ah
             bra    @no_portamento
 @portamento.3:
             sec
@@ -820,9 +814,9 @@ update_psg:
             bpl    @no_portamento
                 stz    player.frequency.delta.lo, X
                 stz    player.frequency.delta.hi, X
-                rmb3   <_ah
+                rmb3   <player.ah
 @no_portamento:
-    lda    <_ah
+    lda    <player.ah
     sta    player.frequency.flag, X
     
     lda    player.frequency.delta.lo, X
@@ -831,14 +825,14 @@ update_psg:
     sta    <_freq+1
 
     ; -- vibrato
-    bbr4   <_al, @no_vibrato
+    bbr4   <player.al, @no_vibrato
         jsr    update_vibrato
 @no_vibrato:
 
     ; -- set frequency
-    bbr2   <_al, @l0
-        rmb2   <_al
-        bbs0   <_al, @noise
+    bbr2   <player.al, @l0
+        rmb2   <player.al
+        bbs0   <player.al, @noise
             ldy    <_note
             lda    freq_table.lo, Y
             clc
@@ -883,8 +877,8 @@ update_psg:
             sta    psg_noise
 @l0:
     ; -- volume
-    bbr1   <_al, @l1
-        rmb1    <_al
+    bbr1   <player.al, @l1
+        rmb1    <player.al
         lda    <_volume
         beq    @skip
             ora    #%10_0_00000
@@ -894,29 +888,29 @@ update_psg:
     
     ; -- volume slide
     lda    player.volume, X
-    bbr3   <_al, @no_volume_slide
-        smb1   <_al
+    bbr3   <player.al, @no_volume_slide
+        smb1   <player.al
         clc
         adc    player.volume.delta, X
         bpl    @vol.plus
             cla
-            rmb3   <_al
+            rmb3   <player.al
             bra    @no_volume_slide
 @vol.plus:
         cmp    #$7c
         bcc    @no_volume_slide
             lda    #$7c
-            rmb3   <_al
+            rmb3   <player.al
 @no_volume_slide:
     sta    player.volume, X
     
-    lda     <_al
+    lda     <player.al
     sta     <player.chn_flag, X
 
     rts
 
 update_vibrato:
-    smb2   <_al
+    smb2   <player.al
     
     lda    player.vibrato, X
     and    #$0f
@@ -1102,92 +1096,92 @@ set_instrument:
 
     clc
     adc    player.instruments
-    sta    <_si
+    sta    <player.si
     cla
     adc    player.instruments+1
-    sta    <_si+1
+    sta    <player.si+1
 
     ldx    <player.chn
     
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.vol.size, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
 
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.vol.loop, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
     
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.vol.lo, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
     
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.vol.hi, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
 
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.arp.size, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
 
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.arp.loop, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
     
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.arp.lo, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
     
-    lda    [_si]
+    lda    [player.si]
     sta    player.instrument.arp.hi, X
-    lda    <_si
+    lda    <player.si
     clc
     adc    player.instrument_count
-    sta    <_si
+    sta    <player.si
     cla
-    adc    <_si+1
-    sta    <_si+1
+    adc    <player.si+1
+    sta    <player.si+1
     
     ; [todo] wave macro
 
@@ -1260,23 +1254,23 @@ portamento_to_note:
             beq    @skip
             
             lda    player.frequency.lo, X
-            sta    <_al
+            sta    <player.al
             lda    player.frequency.hi, X
-            sta    <_ah
-            ora    <_al
+            sta    <player.ah
+            ora    <player.al
             bne    @compute
                 ldy    player.note.previous, X
                 lda    freq_table.lo, Y
-                sta    <_al
+                sta    <player.al
                 lda    freq_table.hi, Y
-                sta    <_ah
+                sta    <player.ah
 @compute:
             ldy    player.note, X
             sec
-            lda    <_al
+            lda    <player.al
             sbc    freq_table.lo, Y
             sta    player.frequency.delta.lo, X
-            lda    <_ah
+            lda    <player.ah
             sbc    freq_table.hi, Y
             sta    player.frequency.delta.hi, X
 
@@ -1354,21 +1348,21 @@ set_volume:
     sta    player.volume, X
     
     pla
-    beq    note_off
+    beq    note_off.2
     rts
 
 note_off:
-    stz    psg_ctrl
-   
     ldx    <player.chn
+    stz    player.arpeggio, X
+    stz    player.vibrato, X
+note_off.2:
     stz    <player.chn_flag, X
-;    stz    player.arpeggio, X
-;    stz    player.vibrato, X
     stz    player.frequency.flag, X
     stz    player.instrument.vol.idx, X
     stz    player.instrument.arp.idx, X
     stz    player.frequency.delta.lo, X
     stz    player.frequency.delta.hi, X
+    stz    psg_ctrl 
     
     rts
 
@@ -1385,24 +1379,24 @@ set_wav:
     lda    [player.ptr], Y
     iny
     
-    stz    <_si
+    stz    <player.si
     
     lsr    A
-    ror    <_si
+    ror    <player.si
     
     lsr    A
-    ror    <_si
+    ror    <player.si
     
     lsr    A
-    ror    <_si
-    sta    <_si+1
+    ror    <player.si
+    sta    <player.si+1
     
     lda    player.wav
     clc
-    adc    <_si
+    adc    <player.si
     sta    player.wav_upload.src
     lda    player.wav+1
-    adc    <_si+1
+    adc    <player.si+1
     sta    player.wav_upload.src+1
 
     jsr    player.wav_upload
