@@ -673,6 +673,8 @@ update_psg:
     lda    player.instrument.arp.hi, X
     sta    <_si+1
     lda    [_si], Y
+    sec
+    sbc    #$0C
     clc
     adc    <_note
     sta    <_note
@@ -730,38 +732,36 @@ update_psg:
     lda    player.instrument.flag, X
     bit    #%0000_0001 
     beq    @std_volume
+        ldy    player.instrument.vol.idx, X
+        lda    player.instrument.vol.lo, X
+        sta    <_si
+        lda    player.instrument.vol.hi, X
+        sta    <_si+1
+        lda    [_si], Y
+        inc    A
+        ldy    player.volume, X
+        phx
+        jsr    mul8
+        lsr    A
+        sta    <_volume
+        plx
 
-    ldy    player.instrument.vol.idx, X
-    lda    player.instrument.vol.lo, X
-    sta    <_si
-    lda    player.instrument.vol.hi, X
-    sta    <_si+1
-    lda    [_si], Y
-    inc    A
-    ldy    player.volume, X
-    phx
-    jsr    mul8
-    lsr    A
-    sta    <_volume
-    plx
-
-    inc    player.instrument.vol.idx, X
-    lda    player.instrument.vol.idx, X
-    cmp    player.instrument.vol.size, X
-    bcc    @no_volume.reset
-        lda    player.instrument.vol.loop, X
-        cmp    #$ff
-        bne    @volume.reset
-            lda    player.instrument.flag, X
-            and    #%1111_1110
-            sta    player.instrument.flag, X
-            cla
+        inc    player.instrument.vol.idx, X
+        lda    player.instrument.vol.idx, X
+        cmp    player.instrument.vol.size, X
+        bcc    @no_volume.reset
+            lda    player.instrument.vol.loop, X
+            cmp    #$ff
+            bne    @volume.reset
+                lda    player.instrument.flag, X
+                and    #%1111_1110
+                sta    player.instrument.flag, X
+                cla
 @volume.reset:
-        sta    player.instrument.vol.idx, X
+            sta    player.instrument.vol.idx, X
 @no_volume.reset:
-    
-    smb1   <_al
-    bra    @no_volume
+        smb1   <_al
+        bra    @no_volume
 @std_volume:
     bbr1   <_al, @no_volume
     lda    player.volume, X
@@ -909,7 +909,6 @@ update_psg:
             rmb3   <_al
 @no_volume_slide:
     sta    player.volume, X
-    sta    <_volume
     
     lda     <_al
     sta     <player.chn_flag, X
@@ -1085,6 +1084,10 @@ volume_slide:
     
     ldx    <player.chn
     sta    player.volume.delta, X
+                
+    lda    player.instrument.flag, X
+    and    #%1111_1110
+    sta    player.instrument.flag, X
 
     lda    <player.chn_flag, X
     ora    #%0000_1000
@@ -1359,6 +1362,8 @@ note_off:
    
     ldx    <player.chn
     stz    <player.chn_flag, X
+;    stz    player.arpeggio, X
+;    stz    player.vibrato, X
     stz    player.frequency.flag, X
     stz    player.instrument.vol.idx, X
     stz    player.instrument.arp.idx, X
@@ -1443,8 +1448,10 @@ note_on:
     rts
 
 pattern_break:
-    ;  ignored for now
+    ;  data is ignored for now
     iny
+
+    smb0   <player.flag
     rts
 
 position_jump:
