@@ -150,7 +150,8 @@ bool Writer::writeInstruments(InstrumentList const& instruments) {
     bool ret  = true;
     const char* names[InstrumentList::EnvelopeCount] = {
         "volume",
-        "arpeggio"
+        "arpeggio",
+        "wave"
     };
     char buffer[64];
     

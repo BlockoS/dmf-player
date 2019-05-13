@@ -1,7 +1,7 @@
 ; Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors. All rights reserved.
 ; Copyrights licensed under the New BSD License. 
 ; See the accompanying LICENSE file for terms.
-;;---------------------------------------------------------------------
+;;-----------------------------------------------------------------------------------------
 
 ; VDC (Video Display Controller)
 videoport    .equ $0000
@@ -124,6 +124,12 @@ player.instrument.arp.loop .ds PSG_CHAN_COUNT
 player.instrument.arp.lo   .ds PSG_CHAN_COUNT
 player.instrument.arp.hi   .ds PSG_CHAN_COUNT
 player.instrument.arp.idx  .ds PSG_CHAN_COUNT
+
+player.instrument.wave.size .ds PSG_CHAN_COUNT
+player.instrument.wave.loop .ds PSG_CHAN_COUNT
+player.instrument.wave.lo   .ds PSG_CHAN_COUNT
+player.instrument.wave.hi   .ds PSG_CHAN_COUNT
+player.instrument.wave.idx  .ds PSG_CHAN_COUNT
 
 player.wav_upload       .ds 1 ; tin
 player.wav_upload.src   .ds 2
@@ -656,6 +662,37 @@ update_psg:
     lda    player.note, X
     sta    <_note
 
+    ; -- instrument wave
+    lda    player.instrument.flag, X
+    bit    #%0000_0100 
+    beq    @no_wave
+
+    ldy    player.instrument.wave.idx, X
+    lda    player.instrument.wave.lo, X
+    sta    <player.si
+    lda    player.instrument.wave.hi, X
+    sta    <player.si+1
+    lda    [player.si], Y
+    
+    jsr    load_wave
+
+    inc    player.instrument.wave.idx, X
+    lda    player.instrument.wave.idx, X
+    cmp    player.instrument.wave.size, X
+    bcc    @no_wave.reset
+        lda    player.instrument.wave.loop, X
+        cmp    #$ff
+        bne    @wave.reset
+            lda    player.instrument.flag, X
+            and    #%1111_1011
+            sta    player.instrument.flag, X
+            cla
+@wave.reset:
+        sta    player.instrument.wave.idx, X
+@no_wave.reset:
+    ;smb2   <player.al
+@no_wave:
+    
     ; -- instrument arpeggio
     lda    player.instrument.flag, X
     bit    #%0000_0010 
@@ -1078,7 +1115,12 @@ volume_slide:
     
     ldx    <player.chn
     sta    player.volume.delta, X
-                
+    bne    @l0
+        lda    <player.chn_flag, X
+        and    #%1111_0111
+        sta    <player.chn_flag, X
+        rts
+@l0:
     lda    player.instrument.flag, X
     and    #%1111_1110
     sta    player.instrument.flag, X
@@ -1086,9 +1128,7 @@ volume_slide:
     lda    <player.chn_flag, X
     ora    #%0000_1000
     sta    <player.chn_flag, X
-
     rts
-
 
 set_instrument:
     lda    [player.ptr], Y
@@ -1183,10 +1223,49 @@ set_instrument:
     adc    <player.si+1
     sta    <player.si+1
     
-    ; [todo] wave macro
+    lda    [player.si]
+    sta    player.instrument.wave.size, X
+    lda    <player.si
+    clc
+    adc    player.instrument_count
+    sta    <player.si
+    cla
+    adc    <player.si+1
+    sta    <player.si+1
+
+    lda    [player.si]
+    sta    player.instrument.wave.loop, X
+    lda    <player.si
+    clc
+    adc    player.instrument_count
+    sta    <player.si
+    cla
+    adc    <player.si+1
+    sta    <player.si+1
+    
+    lda    [player.si]
+    sta    player.instrument.wave.lo, X
+    lda    <player.si
+    clc
+    adc    player.instrument_count
+    sta    <player.si
+    cla
+    adc    <player.si+1
+    sta    <player.si+1
+    
+    lda    [player.si]
+    sta    player.instrument.wave.hi, X
+    lda    <player.si
+    clc
+    adc    player.instrument_count
+    sta    <player.si
+    cla
+    adc    <player.si+1
+    sta    <player.si+1
 
     stz    player.instrument.vol.idx, X
     stz    player.instrument.arp.idx, X
+    stz    player.instrument.wave.idx, X
 
     cla
     phy
@@ -1198,6 +1277,10 @@ set_instrument:
     beq    @no_arp
         ora    #%0000_0010
 @no_arp:
+    ldy    player.instrument.wave.size, X
+    beq    @no_wave
+        ora    #%0000_0100
+@no_wave:
     sta    player.instrument.flag, X
     ply
     rts
@@ -1339,7 +1422,7 @@ panning:
 set_volume:
     ldx    <player.chn
     lda    <player.chn_flag, X
-    ora    #%0000_0010
+    ora    #%0000_0110
     sta    <player.chn_flag, X 
     
     lda    [player.ptr], Y
@@ -1366,19 +1449,28 @@ note_off.2:
     
     rts
 
-
 set_wav:
-    ; Reset write index
-    lda    #%01_0_00000
-    sta    psg_ctrl
-
-    ; Enable write buffer
-    stz    psg_ctrl
-    
     ; Copy wave buffer
     lda    [player.ptr], Y
     iny
     
+    jsr    load_wave
+
+    ; Restore channel volume
+    lda    <player.chn_flag, X
+    beq    @mute
+        ldx    <player.chn
+        lda    player.volume, X
+        lsr    A
+        lsr    A
+        ora    #%10_0_00000
+        sta    psg_ctrl
+        rts
+@mute:
+    stz    psg_ctrl
+    rts
+
+load_wave:
     stz    <player.si
     
     lsr    A
@@ -1399,23 +1491,19 @@ set_wav:
     adc    <player.si+1
     sta    player.wav_upload.src+1
 
+    ; Reset write index
+    lda    #%01_0_00000
+
+    sta    psg_ctrl
+
+    ; Enable write buffer
+    stz    psg_ctrl
+    
     jsr    player.wav_upload
 
     lda    #%01_0_00000
     sta    psg_ctrl
- 
-    ; Restore channel volume
-    lda    <player.chn_flag, X
-    beq    @mute
-        ldx    <player.chn
-        lda    player.volume, X
-        lsr    A
-        lsr    A
-        ora    #%10_0_00000
-        sta    psg_ctrl
-        rts
-@mute:
-    stz    psg_ctrl
+    
     rts
 
 note_on:

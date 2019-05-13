@@ -112,6 +112,10 @@ void InstrumentList::pack(std::vector<DMF::Instrument> const& src) {
     env[Arpeggio].loop.resize(count);
     env[Arpeggio].data.resize(count);
 
+    env[Wave].size.resize(count);
+    env[Wave].loop.resize(count);
+    env[Wave].data.resize(count);
+                
     for(size_t i=0; i<src.size(); i++) {
         env[Volume].size[i] = src[i].std.volume.size;
         env[Volume].loop[i] = src[i].std.volume.loop;
@@ -123,6 +127,12 @@ void InstrumentList::pack(std::vector<DMF::Instrument> const& src) {
         env[Arpeggio].loop[i] = src[i].std.arpeggio.loop;
         for(size_t j=0; j<env[Arpeggio].size[i]; j++) {
             env[Arpeggio].data[i][j] = src[i].std.arpeggio.value[4*j];
+        }
+        
+        env[Wave].size[i] = src[i].std.wave.size;
+        env[Wave].loop[i] = src[i].std.wave.loop;
+        for(size_t j=0; j<env[Wave].size[i]; j++) {
+            env[Wave].data[i][j] = src[i].std.wave.value[4*j];
         }
     }
 }
@@ -197,12 +207,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                     last = _matrix[i].buffer[j].size();
                     _matrix[i].buffer[j].push_back(PCE::SetInstrument);
                     _matrix[i].buffer[j].push_back(pattern_data.instrument);
-                
-                    if(song.instrument[pattern_data.instrument].std.wave.size) {
-                        last = _matrix[i].buffer[j].size();
-                        _matrix[i].buffer[j].push_back(PCE::SetWave);
-                        _matrix[i].buffer[j].push_back(song.instrument[pattern_data.instrument].std.wave.value[0]);
-                    }
                 }
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {

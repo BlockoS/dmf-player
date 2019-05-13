@@ -69,6 +69,7 @@ namespace PCE {
         enum EnvelopeType {
             Volume = 0,
             Arpeggio,
+            Wave,
             EnvelopeCount
         };
         // [todo] arpeggio mode
