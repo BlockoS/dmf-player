@@ -56,7 +56,7 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
                      "%s.matrixRows:      .db $%02x\n"
                      "%s.instrumentCount: .db $%02x\n"
                      "%s.pointers:\n"
-                     "    .dw %s.wav\n"
+                     "    .dw %s.wave\n"
                      "    .dw %s.instruments\n"
                      "    .dw %s.matrix\n",
                      _prefix.c_str(), infos.timeBase,
@@ -220,9 +220,9 @@ bool Writer::writePatternData(PCE::PatternMatrix const& pattern, size_t& index) 
 
 bool Writer::write(std::vector<WaveTable> const& wavetable) {
     bool ret = true;
-    fprintf(_output, "%s.wav:\n", _prefix.c_str());
+    fprintf(_output, "%s.wave:\n", _prefix.c_str());
     for(size_t i=0; ret && (i<wavetable.size()); i++) {
-        fprintf(_output, "%s.wav_%04lx:\n", _prefix.c_str(), i);
+        fprintf(_output, "%s.wave_%04lx:\n", _prefix.c_str(), i);
         ret = writeBytes(&wavetable[i][0], wavetable[i].size(), 16);
     }
     return ret;

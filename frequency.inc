@@ -236,15 +236,12 @@ freq_table.lo8:
 	.db $0e
 
 noise_table:
-	.db $84
-	.db $ad
-	.db $af
-	.db $b2
-	.db $b5
-	.db $b7
-	.db $b9
-	.db $bb
-	.db $bd
-	.db $bf
-	.db $81
-	.db $83
+	.db $84,$ad,$af,$b2,$b5,$b7,$b9,$bb,$bd,$bf,$81,$83
+	.db $84,$ad,$af,$b2,$b5,$b7,$b9,$bb,$bd,$bf,$81,$83
+	.db $84,$ad,$af,$b2,$b5,$b7,$b9,$bb,$bd,$bf,$81,$83
+	.db $84,$ad,$af,$b2,$b5,$b7,$b9,$bb,$bd,$bf,$81,$83
+	.db $84,$ad,$af,$b2,$b5,$b7,$b9,$bb,$bd,$bf,$81,$83
+	.db $84,$ad,$af,$b2,$b5,$b7,$b9,$bb,$bd,$bf,$81,$83
+	.db $84,$86,$87,$89,$8a,$8b,$8c,$8d,$8e,$8f,$90,$91
+	.db $92,$86,$87,$89,$8a,$8b,$8c,$8d,$8e,$8f,$90,$91
+	.db $92,$86,$87,$89,$8a,$8b,$8c,$8d,$8e,$8f,$90,$91

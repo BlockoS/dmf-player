@@ -3,8 +3,7 @@
 ; See the accompanying LICENSE file for terms.
 ;;-------_----------------------------------------------------------------------------------
 
-; [todo] cache wave index!
-; [todo] 83 84 BB BD BF
+; [todo] noise for "claude" : 83 84 BB BD BF
 
 ; VDC (Video Display Controller)
 videoport    .equ $0000
@@ -91,7 +90,7 @@ player.time_tick         .ds 2
 player.pattern_rows      .ds 1
 player.matrix_rows       .ds 1
 player.instrument_count  .ds 1
-player.wav               .ds 2
+player.wave              .ds 2
 player.instruments       .ds 2
 player.matrix            .ds 2
 player.matrix_pos        .ds 1
@@ -116,29 +115,31 @@ player.vibrato.tick       .ds PSG_CHAN_COUNT
 
 player.instrument.flag .ds PSG_CHAN_COUNT 
 
-player.instrument.vol.size .ds PSG_CHAN_COUNT
-player.instrument.vol.loop .ds PSG_CHAN_COUNT
-player.instrument.vol.lo   .ds PSG_CHAN_COUNT
-player.instrument.vol.hi   .ds PSG_CHAN_COUNT
-player.instrument.vol.idx  .ds PSG_CHAN_COUNT
+player.instrument.vol.size  .ds PSG_CHAN_COUNT
+player.instrument.vol.loop  .ds PSG_CHAN_COUNT
+player.instrument.vol.lo    .ds PSG_CHAN_COUNT
+player.instrument.vol.hi    .ds PSG_CHAN_COUNT
+player.instrument.vol.index .ds PSG_CHAN_COUNT
 
-player.instrument.arp.size .ds PSG_CHAN_COUNT
-player.instrument.arp.loop .ds PSG_CHAN_COUNT
-player.instrument.arp.lo   .ds PSG_CHAN_COUNT
-player.instrument.arp.hi   .ds PSG_CHAN_COUNT
-player.instrument.arp.idx  .ds PSG_CHAN_COUNT
+player.instrument.arp.size  .ds PSG_CHAN_COUNT
+player.instrument.arp.loop  .ds PSG_CHAN_COUNT
+player.instrument.arp.lo    .ds PSG_CHAN_COUNT
+player.instrument.arp.hi    .ds PSG_CHAN_COUNT
+player.instrument.arp.index .ds PSG_CHAN_COUNT
 
-player.instrument.wave.size .ds PSG_CHAN_COUNT
-player.instrument.wave.loop .ds PSG_CHAN_COUNT
-player.instrument.wave.lo   .ds PSG_CHAN_COUNT
-player.instrument.wave.hi   .ds PSG_CHAN_COUNT
-player.instrument.wave.idx  .ds PSG_CHAN_COUNT
+player.instrument.wave.size  .ds PSG_CHAN_COUNT
+player.instrument.wave.loop  .ds PSG_CHAN_COUNT
+player.instrument.wave.lo    .ds PSG_CHAN_COUNT
+player.instrument.wave.hi    .ds PSG_CHAN_COUNT
+player.instrument.wave.index .ds PSG_CHAN_COUNT
 
-player.wav_upload       .ds 1 ; tin
-player.wav_upload.src   .ds 2
-player.wav_upload.dst   .ds 2
-player.wav_upload.len   .ds 2
-player.wav_upload.rts   .ds 1 ; rts
+player.wave.id    .ds PSG_CHAN_COUNT
+
+player.wave_upload       .ds 1 ; tin
+player.wave_upload.src   .ds 2
+player.wave_upload.dst   .ds 2
+player.wave_upload.len   .ds 2
+player.wave_upload.rts   .ds 1 ; rts
 
 ;;---------------------------------------------------------------------
 ; Song effects.
@@ -371,16 +372,16 @@ mul8:
 ;;---------------------------------------------------------------------
 load_song:
     lda    #$d3                 ; tin
-    sta    player.wav_upload
+    sta    player.wave_upload
     lda    #32
-    sta    player.wav_upload.len
-    stz    player.wav_upload.len+1
+    sta    player.wave_upload.len
+    stz    player.wave_upload.len+1
     lda    #$60                 ; rts
-    sta    player.wav_upload.rts
+    sta    player.wave_upload.rts
     lda    #low(psg_wavebuf)
-    sta    player.wav_upload.dst
+    sta    player.wave_upload.dst
     lda    #high(psg_wavebuf)
-    sta    player.wav_upload.dst+1
+    sta    player.wave_upload.dst+1
 
     ; read song header
     cly
@@ -414,11 +415,12 @@ load_song:
 
     stz    psg_ctrl
     
-    lda    player.wav
-    sta    player.wav_upload.src
-    lda    player.wav+1
-    sta    player.wav_upload.src+1
-    jsr    player.wav_upload
+    stz    player.wave.id, X
+    lda    player.wave
+    sta    player.wave_upload.src
+    lda    player.wave+1
+    sta    player.wave_upload.src+1
+    jsr    player.wave_upload
 
     lda    #$7c
     sta    player.volume, X
@@ -568,7 +570,7 @@ pattern_data_func:
     .dw retrig
     .dw pattern_break
     .dw set_speed_value2
-    .dw set_wav
+    .dw set_wave
     .dw enable_noise_channel
     .dw set_LFO_mode
     .dw set_LFO_speed
@@ -670,17 +672,19 @@ update_psg:
     bit    #%0000_0100 
     beq    @no_wave
 
-    ldy    player.instrument.wave.idx, X
+    ldy    player.instrument.wave.index, X
     lda    player.instrument.wave.lo, X
     sta    <player.si
     lda    player.instrument.wave.hi, X
     sta    <player.si+1
     lda    [player.si], Y
     
-    jsr    load_wave
-
-    inc    player.instrument.wave.idx, X
-    lda    player.instrument.wave.idx, X
+    cmp    player.wave.id, X
+    beq    @load_wave.skip
+        jsr    load_wave
+@load_wave.skip:
+    inc    player.instrument.wave.index, X
+    lda    player.instrument.wave.index, X
     cmp    player.instrument.wave.size, X
     bcc    @no_wave.reset
         lda    player.instrument.wave.loop, X
@@ -691,7 +695,7 @@ update_psg:
             sta    player.instrument.flag, X
             cla
 @wave.reset:
-        sta    player.instrument.wave.idx, X
+        sta    player.instrument.wave.index, X
 @no_wave.reset:
     ;smb2   <player.al
 @no_wave:
@@ -701,7 +705,7 @@ update_psg:
     bit    #%0000_0010 
     beq    @no_arp
 
-    ldy    player.instrument.arp.idx, X
+    ldy    player.instrument.arp.index, X
     lda    player.instrument.arp.lo, X
     sta    <player.si
     lda    player.instrument.arp.hi, X
@@ -713,8 +717,8 @@ update_psg:
     adc    <_note
     sta    <_note
 
-    inc    player.instrument.arp.idx, X
-    lda    player.instrument.arp.idx, X
+    inc    player.instrument.arp.index, X
+    lda    player.instrument.arp.index, X
     cmp    player.instrument.arp.size, X
     bcc    @no_arp.reset
         lda    player.instrument.arp.loop, X
@@ -725,7 +729,7 @@ update_psg:
             sta    player.instrument.flag, X
             cla
 @arp.reset:
-        sta    player.instrument.arp.idx, X
+        sta    player.instrument.arp.index, X
 @no_arp.reset:
     ;smb2   <player.al
 @no_arp:
@@ -766,7 +770,7 @@ update_psg:
     lda    player.instrument.flag, X
     bit    #%0000_0001 
     beq    @std_volume
-        ldy    player.instrument.vol.idx, X
+        ldy    player.instrument.vol.index, X
         lda    player.instrument.vol.lo, X
         sta    <player.si
         lda    player.instrument.vol.hi, X
@@ -780,8 +784,8 @@ update_psg:
         sta    <_volume
         plx
 
-        inc    player.instrument.vol.idx, X
-        lda    player.instrument.vol.idx, X
+        inc    player.instrument.vol.index, X
+        lda    player.instrument.vol.index, X
         cmp    player.instrument.vol.size, X
         bcc    @no_volume.reset
             lda    player.instrument.vol.loop, X
@@ -792,7 +796,7 @@ update_psg:
                 sta    player.instrument.flag, X
                 cla
 @volume.reset:
-            sta    player.instrument.vol.idx, X
+            sta    player.instrument.vol.index, X
 @no_volume.reset:
         smb1   <player.al
         bra    @no_volume
@@ -1265,9 +1269,9 @@ set_instrument:
     adc    <player.si+1
     sta    <player.si+1
 
-    stz    player.instrument.vol.idx, X
-    stz    player.instrument.arp.idx, X
-    stz    player.instrument.wave.idx, X
+    stz    player.instrument.vol.index, X
+    stz    player.instrument.arp.index, X
+    stz    player.instrument.wave.index, X
 
     cla
     phy
@@ -1443,21 +1447,23 @@ note_off:
 note_off.2:
     stz    <player.chn_flag, X
     stz    player.frequency.flag, X
-    stz    player.instrument.vol.idx, X
-    stz    player.instrument.arp.idx, X
+    stz    player.instrument.vol.index, X
+    stz    player.instrument.arp.index, X
     stz    player.frequency.delta.lo, X
     stz    player.frequency.delta.hi, X
     stz    psg_ctrl 
     
     rts
 
-set_wav:
+set_wave:
     ; Copy wave buffer
     lda    [player.ptr], Y
     iny
-    
-    jsr    load_wave
 
+    cmp    player.wave.id, X
+    beq    @skip
+        jsr    load_wave
+@skip:
     ; Restore channel volume
     lda    <player.chn_flag, X
     beq    @mute
@@ -1473,6 +1479,7 @@ set_wav:
     rts
 
 load_wave:
+    sta    player.wave.id, X
     stz    <player.si
     
     lsr    A
@@ -1485,13 +1492,13 @@ load_wave:
     ror    <player.si
     sta    <player.si+1
     
-    lda    player.wav
+    lda    player.wave
     clc
     adc    <player.si
-    sta    player.wav_upload.src
-    lda    player.wav+1
+    sta    player.wave_upload.src
+    lda    player.wave+1
     adc    <player.si+1
-    sta    player.wav_upload.src+1
+    sta    player.wave_upload.src+1
 
     ; Reset write index
     lda    #%01_0_00000
@@ -1501,7 +1508,7 @@ load_wave:
     ; Enable write buffer
     stz    psg_ctrl
     
-    jsr    player.wav_upload
+    jsr    player.wave_upload
 
     lda    #%01_0_00000
     sta    psg_ctrl
@@ -1527,8 +1534,8 @@ note_on:
         stz    player.frequency.delta.lo, X
         stz    player.frequency.delta.hi, X
 @l0:
-    stz    player.instrument.vol.idx, X
-    stz    player.instrument.arp.idx, X
+    stz    player.instrument.vol.index, X
+    stz    player.instrument.arp.index, X
     rts
 
 pattern_break:
