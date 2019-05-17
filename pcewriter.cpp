@@ -9,6 +9,8 @@
 
 #include "pcewriter.h"
 
+#define MAX_SONG_PREFIX 64
+
 namespace PCE {
 
 Writer::Writer(std::string const& filename)
@@ -45,6 +47,9 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
         // Replace any invalid char by '_'.
         std::regex reg("([^[:alnum:]._])");
         _prefix = regex_replace(_prefix, reg, std::string("_"));
+        if(_prefix.size() > MAX_SONG_PREFIX) {
+            _prefix.resize(MAX_SONG_PREFIX);
+        }
     }
     else {
         _prefix = "song";
@@ -195,7 +200,7 @@ bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> c
         for(size_t j=0; j<matrix[i].pattern.size(); j++) {
             pattern_index[j] = index + matrix[i].pattern[j];
         }
-        snprintf(name, 256, "%s.matrix_%04x", _prefix.c_str(), static_cast<uint32_t>(i));
+        snprintf(name, 256, "matrix_%04x", static_cast<uint32_t>(i));
         if(!writePointerTable(name, "pattern", pattern_index, 16)) {
             return false;
         }
