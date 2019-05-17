@@ -1,7 +1,10 @@
 ; Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors. All rights reserved.
 ; Copyrights licensed under the New BSD License. 
 ; See the accompanying LICENSE file for terms.
-;;-----------------------------------------------------------------------------------------
+;;-------_----------------------------------------------------------------------------------
+
+; [todo] cache wave index!
+; [todo] 83 84 BB BD BF
 
 ; VDC (Video Display Controller)
 videoport    .equ $0000
@@ -908,7 +911,6 @@ update_psg:
             bra    @l0
 @noise:
             lda    <_note
-            and    #$0f
             tay
             lda    noise_table, Y 
             sta    psg_noise
