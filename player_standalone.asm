@@ -780,7 +780,7 @@ update_psg:
         ldy    player.volume, X
         phx
         jsr    mul8
-        lsr    A
+        asl    A
         sta    <_volume
         plx
 
@@ -803,10 +803,32 @@ update_psg:
 @std_volume:
     bbr1   <player.al, @no_volume
     lda    player.volume, X
-    lsr    A
-    lsr    A
     sta    <_volume
 @no_volume:
+
+    ; -- volume slide
+    bbr3   <player.al, @no_volume_slide
+        smb1   <player.al
+        
+        lda    player.instrument.flag, X
+        and    #%1111_1110
+        sta    player.instrument.flag, X
+
+        lda    <_volume
+        clc
+        adc    player.volume.delta, X
+        bpl    @vol.plus
+            cla
+            rmb3   <player.al
+            bra    @set_volume
+@vol.plus:
+        cmp    #$7c
+        bcc    @no_volume_slide
+            lda    #$7c
+            rmb3   <player.al
+@set_volume:
+        sta    player.volume, X
+@no_volume_slide:
 
     ; -- portamento
     lda    player.frequency.flag, X
@@ -858,7 +880,7 @@ update_psg:
             bpl    @no_portamento
                 stz    player.frequency.delta.lo, X
                 stz    player.frequency.delta.hi, X
-                rmb3   <player.ah
+                rmb2   <player.ah
 @no_portamento:
     lda    <player.ah
     sta    player.frequency.flag, X
@@ -924,28 +946,12 @@ update_psg:
         rmb1    <player.al
         lda    <_volume
         beq    @skip
+            lsr    A
+            lsr    A
             ora    #%10_0_00000
 @skip:
         sta    psg_ctrl
 @l1:
-    
-    ; -- volume slide
-    lda    player.volume, X
-    bbr3   <player.al, @no_volume_slide
-        smb1   <player.al
-        clc
-        adc    player.volume.delta, X
-        bpl    @vol.plus
-            cla
-            rmb3   <player.al
-            bra    @no_volume_slide
-@vol.plus:
-        cmp    #$7c
-        bcc    @no_volume_slide
-            lda    #$7c
-            rmb3   <player.al
-@no_volume_slide:
-    sta    player.volume, X
     
     lda     <player.al
     sta     <player.chn_flag, X
@@ -1116,24 +1122,20 @@ vibrato:
     rts
 
 volume_slide:
-    lda    [player.ptr], Y
-    iny
-    
     ldx    <player.chn
+    lda    [player.ptr], Y 
     sta    player.volume.delta, X
     bne    @l0
         lda    <player.chn_flag, X
         and    #%1111_0111
         sta    <player.chn_flag, X
+        iny
         rts
 @l0:
-    lda    player.instrument.flag, X
-    and    #%1111_1110
-    sta    player.instrument.flag, X
-
     lda    <player.chn_flag, X
     ora    #%0000_1000
     sta    <player.chn_flag, X
+    iny
     rts
 
 set_instrument:
