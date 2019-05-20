@@ -9,7 +9,7 @@
 
 #include "pcewriter.h"
 
-#define MAX_SONG_PREFIX 64
+#define MAX_SONG_PREFIX 32
 
 namespace PCE {
 

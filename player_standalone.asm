@@ -101,6 +101,7 @@ player.arpeggio_speed    .ds PSG_CHAN_COUNT
 
 player.note.previous      .ds PSG_CHAN_COUNT
 player.note               .ds PSG_CHAN_COUNT
+player.volume.orig        .ds PSG_CHAN_COUNT
 player.volume             .ds PSG_CHAN_COUNT
 player.volume.delta       .ds PSG_CHAN_COUNT
 player.arpeggio           .ds PSG_CHAN_COUNT
@@ -424,6 +425,7 @@ load_song:
 
     lda    #$7c
     sta    player.volume, X
+    sta    player.volume.orig, X
     stz    player.volume.delta, X
 
     inx
@@ -777,12 +779,13 @@ update_psg:
         sta    <player.si+1
         lda    [player.si], Y
         inc    A
-        ldy    player.volume, X
+        ldy    player.volume.orig, X
         phx
         jsr    mul8
         asl    A
         sta    <_volume
         plx
+        sta    player.volume, X
 
         inc    player.instrument.vol.index, X
         lda    player.instrument.vol.index, X
@@ -802,33 +805,9 @@ update_psg:
         bra    @no_volume
 @std_volume:
     bbr1   <player.al, @no_volume
-    lda    player.volume, X
-    sta    <_volume
+        lda    player.volume, X
+        sta    <_volume
 @no_volume:
-
-    ; -- volume slide
-    bbr3   <player.al, @no_volume_slide
-        smb1   <player.al
-        
-        lda    player.instrument.flag, X
-        and    #%1111_1110
-        sta    player.instrument.flag, X
-
-        lda    <_volume
-        clc
-        adc    player.volume.delta, X
-        bpl    @vol.plus
-            cla
-            rmb3   <player.al
-            bra    @set_volume
-@vol.plus:
-        cmp    #$7c
-        bcc    @no_volume_slide
-            lda    #$7c
-            rmb3   <player.al
-@set_volume:
-        sta    player.volume, X
-@no_volume_slide:
 
     ; -- portamento
     lda    player.frequency.flag, X
@@ -948,10 +927,29 @@ update_psg:
         beq    @skip
             lsr    A
             lsr    A
-            ora    #%10_0_00000
+           ora    #%10_0_00000
 @skip:
         sta    psg_ctrl
 @l1:
+   
+    ; -- volume slide
+    bbr3   <player.al, @no_volume_slide
+        smb1   <player.al
+        lda    player.volume, X
+        clc
+        adc    player.volume.delta, X
+        bpl    @vol.plus
+            cla
+            rmb3   <player.al
+            bra    @set_volume
+@vol.plus:
+        cmp    #$7c
+        bcc    @set_volume
+            lda    #$7c
+            rmb3   <player.al
+@set_volume:
+        sta    player.volume, X
+@no_volume_slide:
     
     lda     <player.al
     sta     <player.chn_flag, X
@@ -1132,6 +1130,10 @@ volume_slide:
         iny
         rts
 @l0:
+    lda    player.instrument.flag, X
+    and    #%1111_1110
+    sta    player.instrument.flag, X
+
     lda    <player.chn_flag, X
     ora    #%0000_1000
     sta    <player.chn_flag, X
@@ -1436,6 +1438,7 @@ set_volume:
     lda    [player.ptr], Y
     pha
     iny
+    sta    player.volume.orig, X
     sta    player.volume, X
     
     pla
@@ -1458,6 +1461,7 @@ note_off.2:
     rts
 
 set_wave:
+    ldx    <player.chn
     ; Copy wave buffer
     lda    [player.ptr], Y
     iny
@@ -1469,7 +1473,6 @@ set_wave:
     ; Restore channel volume
     lda    <player.chn_flag, X
     beq    @mute
-        ldx    <player.chn
         lda    player.volume, X
         lsr    A
         lsr    A
