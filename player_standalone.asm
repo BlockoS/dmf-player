@@ -684,6 +684,7 @@ update_psg:
     cmp    player.wave.id, X
     beq    @load_wave.skip
         jsr    load_wave
+        smb1   <player.al
 @load_wave.skip:
     inc    player.instrument.wave.index, X
     lda    player.instrument.wave.index, X
@@ -895,9 +896,9 @@ update_psg:
                 sta    player.frequency.lo, X
                 bra    @freq.delta.reset
 @check.lo:
-            cmp    #$1b
+            cmp    #$0c
             bcc    @freq.set
-                lda    #$1a
+                lda    #$0c
                 sta    player.frequency.hi, X
                 lda    #$ba
                 sta    player.frequency.lo, X
@@ -1418,9 +1419,12 @@ enable_noise_channel:
     lda    <player.chn_flag, X
     and    #%1111_1110 
     ora    [player.ptr], Y
-    iny
-
     sta    <player.chn_flag, X 
+    bit    #$01
+    bne    @end
+        stz    psg_noise
+@end:
+    iny
     rts
 
 panning:
@@ -1442,7 +1446,7 @@ set_volume:
     sta    player.volume, X
     
     pla
-    beq    note_off.2
+    ;beq    note_off.2
     rts
 
 note_off:
@@ -1505,17 +1509,15 @@ load_wave:
     adc    <player.si+1
     sta    player.wave_upload.src+1
 
-    ; Reset write index
-    lda    #%01_0_00000
-
-    sta    psg_ctrl
-
     ; Enable write buffer
     stz    psg_ctrl
     
     jsr    player.wave_upload
 
-    lda    #%01_0_00000
+    lda    player.volume, X
+    lsr    A
+    lsr    A
+    ora    #%10_0_00000
     sta    psg_ctrl
     
     rts
