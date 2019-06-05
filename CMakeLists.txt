@@ -28,4 +28,5 @@ target_include_directories(dmfread PRIVATE ${ZLIB_INCLUDE_DIRS})
 target_compile_features(dmfread PUBLIC cxx_std_11)
 
 install(TARGETS dmfread DESTINATION bin)
-install(FILES mul.inc sin.inc DESTINATION pce)
+install(FILES $<TARGET_FILE_DIR:mul.tables>/mul.inc $<TARGET_FILE_DIR:sin.table>/sin.inc DESTINATION pce)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/pce/ DESTINATION pce)
