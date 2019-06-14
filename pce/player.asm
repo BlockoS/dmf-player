@@ -114,6 +114,14 @@ Rest               = $40 ; For values between 0 and 63
 ;;---------------------------------------------------------------------
 
     .code
+;;---------------------------------------------------------------------
+; name : mul8
+; desc : 8 bits unsigned multiplication 16 bits result.
+; in   : A - first operand
+;        Y - second operand
+; out  : A - result MSB
+;        X - result LSB
+;;---------------------------------------------------------------------
 mul8:
     sta    <mul8.lo
     sta    <mul8.hi
@@ -129,6 +137,12 @@ mul8:
     sbc    [mul8.hi+2], Y
     rts
     
+;;---------------------------------------------------------------------
+; name : wave_upload
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 wave_upload:
     phy
     cly
@@ -210,6 +224,12 @@ load_song:
 
     rts
 
+;;---------------------------------------------------------------------
+; name : update_matrix
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 update_matrix:
     lda    player.matrix_pos
     cmp    player.matrix_rows
@@ -269,7 +289,7 @@ update_matrix:
     rts
 
 ;;---------------------------------------------------------------------
-; name : 
+; name : fetch_pattern
 ; desc : 
 ; in   : 
 ; out  : 
@@ -301,7 +321,6 @@ fetch_pattern:
         dec    a
         sta    <player.rest, X
         bra    @inc_ptr
-
 @fetch
     pha 
     
@@ -313,7 +332,6 @@ fetch_pattern:
 
     pla 
     bpl    @loop
-
 @inc_ptr:
     tya
     clc
@@ -329,6 +347,7 @@ fetch_pattern:
 fetch_pattern_data:
     jmp    [pattern_data_func, X]
 
+;;---------------------------------------------------------------------
 pattern_data_func:
     .dw arpeggio
     .dw arpeggio_speed
@@ -364,7 +383,12 @@ pattern_data_func:
     .dw note_on
     .dw note_off
 
-; [todo] params 
+;;---------------------------------------------------------------------
+; name : update_chan
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 update_chan:
     ldx    <player.chn
     lda    <player.rest, X
@@ -389,6 +413,12 @@ update_chan:
     clc
     rts
 
+;;---------------------------------------------------------------------
+; name : update_song
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 update_song:
     stz   <player.flag
     
@@ -436,6 +466,12 @@ update_song:
 @l3:
     rts
 
+;;---------------------------------------------------------------------
+; name : update_psg
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 update_psg:
     stx    <player.chn
     stx    psg_ch
@@ -733,6 +769,12 @@ update_psg:
 
     rts
 
+;;---------------------------------------------------------------------
+; name : update_vibrato
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 update_vibrato:
     smb2   <player.al
     
@@ -852,7 +894,7 @@ update_vibrato:
 
     rts
 
-; [todo] load data
+;;---------------------------------------------------------------------
 vibrato_mode:
 vibrato_depth:
 port_to_note_vol_slide:
@@ -874,6 +916,12 @@ set_sample_bank:
     iny
     rts
 
+;;---------------------------------------------------------------------
+; name : vibrato
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 vibrato:
     lda    [player.ptr], Y
     bne    @l0
@@ -896,6 +944,12 @@ vibrato:
     iny
     rts
 
+;;---------------------------------------------------------------------
+; name : volume_slide
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 volume_slide:
     ldx    <player.chn
     lda    [player.ptr], Y 
@@ -917,6 +971,12 @@ volume_slide:
     iny
     rts
 
+;;---------------------------------------------------------------------
+; name : set_instrument
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 set_instrument:
     lda    [player.ptr], Y
     iny
@@ -1072,6 +1132,12 @@ set_instrument:
     ply
     rts
 
+;;---------------------------------------------------------------------
+; name : portamento_down
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 portamento_down:
     ldx    <player.chn
     lda    [player.ptr], Y
@@ -1089,6 +1155,12 @@ portamento_down:
         iny
         rts
 
+;;---------------------------------------------------------------------
+; name : portamento_up
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 portamento_up:
     ldx    <player.chn
     lda    [player.ptr], Y
@@ -1106,6 +1178,12 @@ portamento_up:
         iny
         rts
 
+;;---------------------------------------------------------------------
+; name : portamento_to_note
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 portamento_to_note:
     ldx    <player.chn
     lda    [player.ptr], Y
@@ -1173,6 +1251,12 @@ portamento_to_note:
     iny
     rts
 
+;;---------------------------------------------------------------------
+; name : arpeggio_speed
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 arpeggio_speed:
     lda    [player.ptr], Y
     iny
@@ -1180,6 +1264,12 @@ arpeggio_speed:
     sta    player.arpeggio_speed, X
     rts
 
+;;---------------------------------------------------------------------
+; name : arpeggio
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 arpeggio:
     lda    [player.ptr], Y
     iny
@@ -1190,6 +1280,12 @@ arpeggio:
     stz    <player.current_arpeggio_tick, X
     rts
 
+;;---------------------------------------------------------------------
+; name : enable_noise_channel
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 enable_noise_channel:
     ldx    <player.chn
     lda    <player.chn_flag, X
@@ -1203,12 +1299,24 @@ enable_noise_channel:
     iny
     rts
 
+;;---------------------------------------------------------------------
+; name : panning
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 panning:
     lda    [player.ptr], Y
     sta    psg_pan
     iny
     rts
 
+;;---------------------------------------------------------------------
+; name : set_volume
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 set_volume:
     ldx    <player.chn
     lda    <player.chn_flag, X
@@ -1225,6 +1333,12 @@ set_volume:
 ;    beq    note_off.2
     rts
 
+;;---------------------------------------------------------------------
+; name : note_off
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 note_off:
     ldx    <player.chn
     stz    player.arpeggio, X
@@ -1240,6 +1354,12 @@ note_off.2:
     
     rts
 
+;;---------------------------------------------------------------------
+; name : set_wave
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 set_wave:
     ldx    <player.chn
     ; Copy wave buffer
@@ -1263,6 +1383,12 @@ set_wave:
     stz    psg_ctrl
     rts
 
+;;---------------------------------------------------------------------
+; name : load_wave
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 load_wave:
     sta    player.wave.id, X
     stz    <player.si
@@ -1289,6 +1415,12 @@ load_wave:
         
     rts
 
+;;---------------------------------------------------------------------
+; name : note_on
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 note_on:
     ldx    <player.chn
     lda    player.note, X
@@ -1312,6 +1444,12 @@ note_on:
     stz    player.instrument.arp.index, X
     rts
 
+;;---------------------------------------------------------------------
+; name : pattern_break
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 pattern_break:
     ;  data is ignored for now
     iny
@@ -1319,6 +1457,12 @@ pattern_break:
     smb0   <player.flag
     rts
 
+;;---------------------------------------------------------------------
+; name : position_jump
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
 position_jump:
     lda    [player.ptr], Y
     iny
@@ -1326,6 +1470,7 @@ position_jump:
     smb0   <player.flag
     rts
 
+;;---------------------------------------------------------------------
     ; Align to 256
     .org (* + $ff) & $ff00
     .include "mul.inc"
