@@ -21,6 +21,7 @@ player.si                       .ds 2
 player.r0                       .ds 2
 player.r1                       .ds 2
 player.wave_upload.src          .ds 2
+player.psg_ctrl                 .ds PSG_CHAN_COUNT 
 
 _note   .ds 1
 _volume .ds 1
@@ -205,7 +206,8 @@ load_song:
     sta    psg_ctrl
 
     stz    psg_ctrl
-    
+    stz    <player.psg_ctrl, X
+
     stz    player.wave.id, X
     lda    player.wave
     sta    <player.wave_upload.src
@@ -466,6 +468,7 @@ update_song:
 @l3:
     rts
 
+
 ;;---------------------------------------------------------------------
 ; name : update_psg
 ; desc : 
@@ -473,6 +476,35 @@ update_song:
 ; out  : 
 ;;---------------------------------------------------------------------
 update_psg:
+;    clx
+;@l0:
+;    stx    psg_ch
+;    lda    <player.psg_ctrl, X
+;    sta    psg_ctrl
+;    inx
+;    cpx    #05
+;    bne    @l0
+
+    clx
+    jsr    update_psg.ch
+    ldx    #$01
+    jsr    update_psg.ch
+    ldx    #$02
+    jsr    update_psg.ch
+    ldx    #$03
+    jsr    update_psg.ch
+    ldx    #$04
+    jsr    update_psg.ch
+    ldx    #$05
+    jmp    update_psg.ch
+
+;;---------------------------------------------------------------------
+; name : update_psg.ch
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
+update_psg.ch:
     stx    <player.chn
     stx    psg_ch
     lda    <player.chn_flag, X
@@ -742,6 +774,7 @@ update_psg:
             lsr    A
             ora    #%10_0_00000
 @skip:
+        sta    <player.psg_ctrl, X
         sta    psg_ctrl
 @l1:
    
@@ -1144,14 +1177,17 @@ portamento_down:
     sta    player.frequency.speed, X 
     beq    @l0
         lda    player.frequency.flag, X
+        and    #%1111_1100
         ora    #%0000_0001
         sta    player.frequency.flag, X
         iny
         rts
 @l0:
         lda    player.frequency.flag, X
-        and    #%1111_1110
+        and    #%1111_1100
         sta    player.frequency.flag, X
+        stz    player.frequency.delta.lo, X
+        stz    player.frequency.delta.hi, X
         iny
         rts
 
@@ -1167,14 +1203,17 @@ portamento_up:
     sta    player.frequency.speed, X 
     beq    @l0
         lda    player.frequency.flag, X
+        and    #%1111_1100
         ora    #%0000_0010
         sta    player.frequency.flag, X
         iny
         rts
 @l0:
         lda    player.frequency.flag, X
-        and    #%1111_1101
+        and    #%1111_1100
         sta    player.frequency.flag, X
+        stz    player.frequency.delta.lo, X
+        stz    player.frequency.delta.hi, X
         iny
         rts
 
@@ -1350,6 +1389,7 @@ note_off.2:
     stz    player.instrument.arp.index, X
     stz    player.frequency.delta.lo, X
     stz    player.frequency.delta.hi, X
+    stz    <player.psg_ctrl, X
     stz    psg_ctrl 
     
     rts
@@ -1377,9 +1417,11 @@ set_wave:
         lsr    A
         lsr    A
         ora    #%10_0_00000
+        sta    <player.psg_ctrl, X
         sta    psg_ctrl
         rts
 @mute:
+    stz    <player.psg_ctrl, X
     stz    psg_ctrl
     rts
 

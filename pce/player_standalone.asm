@@ -273,15 +273,8 @@ irq_reset:
     stz    color_data+1
 
     jsr    update_song
-
-    ldx    #$05
-@l0:
-    stx    <player.chn
     jsr    update_psg
 
-    dex
-    bpl    @l0
-    
     stz    color_reg
     stz    color_reg+1
     lda    #$00 ;#$38
