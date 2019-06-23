@@ -22,6 +22,7 @@ player.r0                       .ds 2
 player.r1                       .ds 2
 player.wave_upload.src          .ds 2
 player.psg_ctrl                 .ds PSG_CHAN_COUNT 
+player.delay                    .ds PSG_CHAN_COUNT 
 
 _note   .ds 1
 _volume .ds 1
@@ -505,6 +506,11 @@ update_psg:
 ; out  : 
 ;;---------------------------------------------------------------------
 update_psg.ch:
+    lda    <player.delay, X
+    beq    @no_delay
+        dec    <player.delay, X
+        rts
+@no_delay:
     stx    <player.chn
     stx    psg_ch
     lda    <player.chn_flag, X
@@ -940,7 +946,6 @@ set_LFO_mode:
 set_LFO_speed:
 note_slide_up:
 note_slide_down:
-note_delay:
 sync_signal:
 fine_tune:
 global_fine_tune:
@@ -948,6 +953,30 @@ set_sample_bank:
     lda    [player.ptr], Y
     iny
     rts
+
+;;---------------------------------------------------------------------
+; name : note_delay
+; desc : 
+; in   : 
+; out  : 
+;;---------------------------------------------------------------------
+note_delay:
+    lda    <player.pattern_pos
+    and    #$01
+    tax
+    
+    lda    [player.ptr], Y
+    iny
+
+    cmp    player.time_tick, X
+    bcs    @reset_delay
+        ldx    <player.chn
+        sta    <player.delay, X
+        rts
+@reset_delay:
+        ldx    <player.chn
+        stz    <player.delay, X
+        rts
 
 ;;---------------------------------------------------------------------
 ; name : vibrato
