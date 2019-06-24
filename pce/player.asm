@@ -477,14 +477,32 @@ update_song:
 ; out  : 
 ;;---------------------------------------------------------------------
 update_psg:
-;    clx
-;@l0:
-;    stx    psg_ch
-;    lda    <player.psg_ctrl, X
-;    sta    psg_ctrl
-;    inx
-;    cpx    #05
-;    bne    @l0
+    ; Updating the psg control register for each channel seems to fix the wavetable gap/latency.
+    ; This is at least how it seems to have been fixed in After Burner 2.
+    clx
+    stx    psg_ch
+    lda    <player.psg_ctrl, X
+    sta    psg_ctrl
+    
+    inx
+    stx    psg_ch
+    lda    <player.psg_ctrl, X
+    sta    psg_ctrl
+    
+    inx
+    stx    psg_ch
+    lda    <player.psg_ctrl, X
+    sta    psg_ctrl
+    
+    inx
+    stx    psg_ch
+    lda    <player.psg_ctrl, X
+    sta    psg_ctrl
+    
+    inx
+    stx    psg_ch
+    lda    <player.psg_ctrl, X
+    sta    psg_ctrl
 
     clx
     jsr    update_psg.ch
