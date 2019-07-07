@@ -104,6 +104,8 @@ void SongPacker::pack(DMF::Song const& song) {
 void InstrumentList::pack(std::vector<DMF::Instrument> const& src) {
     count = src.size();
     
+    flag.resize(count);
+
     env[Volume].size.resize(count);
     env[Volume].loop.resize(count);
     env[Volume].data.resize(count);
@@ -117,6 +119,8 @@ void InstrumentList::pack(std::vector<DMF::Instrument> const& src) {
     env[Wave].data.resize(count);
                 
     for(size_t i=0; i<src.size(); i++) {
+        flag[i] = src[i].std.arpeggioMode ? 0x80 : 0x00; // [todo] add more ?
+
         env[Volume].size[i] = src[i].std.volume.size;
         env[Volume].loop[i] = src[i].std.volume.loop;
         for(size_t j=0; j<env[Volume].size[i]; j++) {

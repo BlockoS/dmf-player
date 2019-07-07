@@ -607,7 +607,18 @@ update_psg.ch:
     lda    player.instrument.flag, X
     bit    #%0000_0010 
     beq    @no_arp
-
+    bit    #%1000_0000 
+    bne    @std.arp
+@fixed.arp:
+        ; [todo] We'll find a clever implementation later.
+        ldy    player.instrument.arp.index, X
+        lda    player.instrument.arp.lo, X
+        sta    <player.si
+        lda    player.instrument.arp.hi, X
+        sta    <player.si+1
+        lda    [player.si], Y        
+        bra    @arp.store
+@std.arp:
     ldy    player.instrument.arp.index, X
     lda    player.instrument.arp.lo, X
     sta    <player.si
@@ -618,6 +629,7 @@ update_psg.ch:
     sbc    #$0C
     clc
     adc    <_note
+@arp.store:
     sta    <_note
 
     inc    player.instrument.arp.index, X
@@ -634,7 +646,7 @@ update_psg.ch:
 @arp.reset:
         sta    player.instrument.arp.index, X
 @no_arp.reset:
-    ;smb2   <player.al
+    smb2   <player.al
 @no_arp:
     
     ; -- arpeggio
@@ -1222,11 +1234,12 @@ set_instrument:
     adc    <player.si+1
     sta    <player.si+1
 
+    lda    [player.si]
+    
     stz    player.instrument.vol.index, X
     stz    player.instrument.arp.index, X
     stz    player.instrument.wave.index, X
 
-    cla
     phy
     ldy    player.instrument.vol.size, X
     beq    @no_vol

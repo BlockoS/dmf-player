@@ -72,7 +72,7 @@ namespace PCE {
             Wave,
             EnvelopeCount
         };
-        // [todo] arpeggio mode
+        std::vector<uint8_t> flag; 
         Envelope env[EnvelopeCount];
         size_t   count;
         void pack(std::vector<DMF::Instrument> const& src);
