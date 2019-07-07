@@ -74,10 +74,12 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
                      _prefix.c_str(),
                      _prefix.c_str());
                     
-    fprintf(_output, "%s.name:          .db \"%s\"\n"
-                     "%s.author:        .db \"%s\"\n",
-                     _prefix.c_str(), infos.name.data,
-                     _prefix.c_str(), infos.author.data);
+    fprintf(_output, "%s.name:          .db %d\n"
+                     "                  .db \"%s\"\n"
+                     "%s.author:        .db %d\n"
+                     "                  .db \"%s\"\n",
+                     _prefix.c_str(), (int)strlen(infos.name.data), infos.name.data,
+                     _prefix.c_str(), (int)strlen(infos.author.data), infos.author.data);
     
     return true;
 }

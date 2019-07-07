@@ -2,9 +2,16 @@
 ; Copyrights licensed under the New BSD License. 
 ; See the accompanying LICENSE file for terms.
 ;;-------_----------------------------------------------------------------------------------
+
+;;
+;; Title: VDC Functions.
+;;
     .zp
 mul8.lo .ds 4
 mul8.hi .ds 4
+
+song.name   .ds 2
+song.author .ds 2
 
 player.chn                      .ds 1
 player.pattern_pos              .ds 1
@@ -116,14 +123,18 @@ Rest               = $40 ; For values between 0 and 63
 ;;---------------------------------------------------------------------
 
     .code
-;;---------------------------------------------------------------------
-; name : mul8
-; desc : 8 bits unsigned multiplication 16 bits result.
-; in   : A - first operand
-;        Y - second operand
-; out  : A - result MSB
-;        X - result LSB
-;;---------------------------------------------------------------------
+;;
+;; function: mul8
+;; 8 bits unsigned multiplication 16 bits result.
+;;
+;; Parameters:
+;;  A - first operand
+;;  Y - second operand
+;;
+;; Return:
+;;  A - result MSB
+;;  X - result LSB
+;;
 mul8:
     sta    <mul8.lo
     sta    <mul8.hi
@@ -138,13 +149,14 @@ mul8:
     lda    [mul8.hi  ], Y
     sbc    [mul8.hi+2], Y
     rts
-    
-;;---------------------------------------------------------------------
-; name : wave_upload
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+
+;;
+;; function: wave_upload
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 wave_upload:
     phy
     cly
@@ -169,12 +181,15 @@ wave_upload:
 
     rts
 
-;;---------------------------------------------------------------------
-; name : load_song
-; desc : Initialize player and load song
-; in   : <_si Pointer to song data
-; out  : 
-;;---------------------------------------------------------------------
+;;
+;; function: load_song
+;; Initialize player and load song.
+;;
+;; Parameters:
+;;  <_si - Pointer to song data
+;;
+;; Return:
+;;
 load_song:
     ; read song header
     cly
@@ -184,7 +199,24 @@ load_song:
     iny
     cpy    #12
     bne    @copy_header
-    
+
+    tya
+    clc
+    adc    <_si
+    sta    <song.name
+    cla
+    adc    <_si+1
+    sta    <song.name+1
+
+    lda    [_si], Y
+    inc    A
+    clc
+    adc    <song.name
+    sta    <song.author
+    cla
+    adc    <song.name+1
+    sta    <song.author+1
+
     stz    player.matrix_pos
     jsr    update_matrix
 
