@@ -124,7 +124,7 @@ Rest               = $40 ; For values between 0 and 63
 
     .code
 ;;
-;; function: mul8
+;; Function: mul8
 ;; 8 bits unsigned multiplication 16 bits result.
 ;;
 ;; Parameters:
@@ -151,7 +151,7 @@ mul8:
     rts
 
 ;;
-;; function: wave_upload
+;; Function: wave_upload
 ;;
 ;; Parameters:
 ;;
@@ -182,7 +182,7 @@ wave_upload:
     rts
 
 ;;
-;; function: load_song
+;; Function: load_song
 ;; Initialize player and load song.
 ;;
 ;; Parameters:
@@ -259,12 +259,13 @@ load_song:
 
     rts
 
-;;---------------------------------------------------------------------
-; name : update_matrix
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+;;
+;; Function: update_matrix
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 update_matrix:
     lda    player.matrix_pos
     cmp    player.matrix_rows
@@ -323,12 +324,13 @@ update_matrix:
 
     rts
 
-;;---------------------------------------------------------------------
-; name : fetch_pattern
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+;;
+;; Function: fetch_pattern
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 fetch_pattern:
     cly
 @loop:    
@@ -382,48 +384,13 @@ fetch_pattern:
 fetch_pattern_data:
     jmp    [pattern_data_func, X]
 
-;;---------------------------------------------------------------------
-pattern_data_func:
-    .dw arpeggio
-    .dw arpeggio_speed
-    .dw portamento_up
-    .dw portamento_down
-    .dw portamento_to_note
-    .dw vibrato
-    .dw vibrato_mode
-    .dw vibrato_depth
-    .dw port_to_note_vol_slide
-    .dw vibrato_vol_slide
-    .dw tremolo
-    .dw panning
-    .dw set_speed_value1
-    .dw volume_slide
-    .dw position_jump
-    .dw retrig
-    .dw pattern_break
-    .dw set_speed_value2
-    .dw set_wave
-    .dw enable_noise_channel
-    .dw set_LFO_mode
-    .dw set_LFO_speed
-    .dw note_slide_up
-    .dw note_slide_down
-    .dw note_delay
-    .dw sync_signal
-    .dw fine_tune
-    .dw global_fine_tune
-    .dw set_sample_bank
-    .dw set_volume
-    .dw set_instrument
-    .dw note_on
-    .dw note_off
-
-;;---------------------------------------------------------------------
-; name : update_chan
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+;;
+;; Function: update_chan
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 update_chan:
     ldx    <player.chn
     lda    <player.rest, X
@@ -448,12 +415,13 @@ update_chan:
     clc
     rts
 
-;;---------------------------------------------------------------------
-; name : update_song
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+;;
+;; Function: update_song
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 update_song:
     stz   <player.flag
     
@@ -501,13 +469,13 @@ update_song:
 @l3:
     rts
 
-
-;;---------------------------------------------------------------------
-; name : update_psg
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+;;
+;; Function: update_psg
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 update_psg:
     ; Updating the psg control register for each channel seems to fix the wavetable gap/latency.
     ; This is at least how it seems to have been fixed in After Burner 2.
@@ -537,25 +505,25 @@ update_psg:
     sta    psg_ctrl
 
     clx
-    jsr    update_psg.ch
+    jsr    @update_psg.ch
     ldx    #$01
-    jsr    update_psg.ch
+    jsr    @update_psg.ch
     ldx    #$02
-    jsr    update_psg.ch
+    jsr    @update_psg.ch
     ldx    #$03
-    jsr    update_psg.ch
+    jsr    @update_psg.ch
     ldx    #$04
-    jsr    update_psg.ch
+    jsr    @update_psg.ch
     ldx    #$05
-    jmp    update_psg.ch
-
-;;---------------------------------------------------------------------
-; name : update_psg.ch
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-update_psg.ch:
+;    jmp    update_psg.ch
+;;
+;; Function: update_psg.ch
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@update_psg.ch:
     lda    <player.delay, X
     beq    @no_delay
         dec    <player.delay, X
@@ -870,12 +838,13 @@ update_psg.ch:
 
     rts
 
-;;---------------------------------------------------------------------
-; name : update_vibrato
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+;;
+;; Function: update_vibrato
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 update_vibrato:
     smb2   <player.al
     
@@ -994,35 +963,69 @@ update_vibrato:
     sxy
 
     rts
-
 ;;---------------------------------------------------------------------
-vibrato_mode:
-vibrato_depth:
-port_to_note_vol_slide:
-vibrato_vol_slide:
-tremolo:
-set_speed_value1:
-retrig:
-set_speed_value2:
-set_LFO_mode:
-set_LFO_speed:
-note_slide_up:
-note_slide_down:
-sync_signal:
-fine_tune:
-global_fine_tune:
-set_sample_bank:
+pattern_data_func:
+    .dw @arpeggio
+    .dw @arpeggio_speed
+    .dw @portamento_up
+    .dw @portamento_down
+    .dw @portamento_to_note
+    .dw @vibrato
+    .dw @vibrato_mode
+    .dw @vibrato_depth
+    .dw @port_to_note_vol_slide
+    .dw @vibrato_vol_slide
+    .dw @tremolo
+    .dw @panning
+    .dw @set_speed_value1
+    .dw @volume_slide
+    .dw @position_jump
+    .dw @retrig
+    .dw @pattern_break
+    .dw @set_speed_value2
+    .dw @set_wave
+    .dw @enable_noise_channel
+    .dw @set_LFO_mode
+    .dw @set_LFO_speed
+    .dw @note_slide_up
+    .dw @note_slide_down
+    .dw @note_delay
+    .dw @sync_signal
+    .dw @fine_tune
+    .dw @global_fine_tune
+    .dw @set_sample_bank
+    .dw @set_volume
+    .dw @set_instrument
+    .dw @note_on
+    .dw @note_off
+;;---------------------------------------------------------------------
+@vibrato_mode:
+@vibrato_depth:
+@port_to_note_vol_slide:
+@vibrato_vol_slide:
+@tremolo:
+@set_speed_value1:
+@retrig:
+@set_speed_value2:
+@set_LFO_mode:
+@set_LFO_speed:
+@note_slide_up:
+@note_slide_down:
+@sync_signal:
+@fine_tune:
+@global_fine_tune:
+@set_sample_bank:
     lda    [player.ptr], Y
     iny
     rts
-
-;;---------------------------------------------------------------------
-; name : note_delay
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-note_delay:
+;;
+;; Function: @note_delay
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@note_delay:
     lda    <player.pattern_pos
     and    #$01
     tax
@@ -1031,31 +1034,32 @@ note_delay:
     iny
 
     cmp    player.time_tick, X
-    bcs    @reset_delay
+    bcs    @note_delay.reset
+@note_delay.set:
         ldx    <player.chn
         sta    <player.delay, X
         rts
-@reset_delay:
+@note_delay.reset:
         ldx    <player.chn
         stz    <player.delay, X
         rts
-
-;;---------------------------------------------------------------------
-; name : vibrato
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-vibrato:
+;;
+;; Function: @vibrato
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@vibrato:
     lda    [player.ptr], Y
-    bne    @l0
+    bne    @vibrato.set
+@vibrato.reset:
         lda    <player.chn_flag, X
         and    #%1110_1111
         sta    <player.chn_flag, X
-
         iny
         rts
-@l0:
+@vibrato.set:
     ldx    <player.chn
     sta    player.vibrato, X
 
@@ -1067,24 +1071,25 @@ vibrato:
 
     iny
     rts
-
-;;---------------------------------------------------------------------
-; name : volume_slide
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-volume_slide:
+;;
+;; Function: @volume_slide
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@volume_slide:
     ldx    <player.chn
     lda    [player.ptr], Y 
     sta    player.volume.delta, X
-    bne    @l0
+    bne    @volume_slide.set
+@volume_slide.reset:
         lda    <player.chn_flag, X
         and    #%1111_0111
         sta    <player.chn_flag, X
         iny
         rts
-@l0:
+@volume_slide.set:
     lda    player.instrument.flag, X
     and    #%1111_1110
     sta    player.instrument.flag, X
@@ -1094,14 +1099,14 @@ volume_slide:
     sta    <player.chn_flag, X
     iny
     rts
-
-;;---------------------------------------------------------------------
-; name : set_instrument
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-set_instrument:
+;;
+;; Function: @set_instrument
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@set_instrument:
     lda    [player.ptr], Y
     iny
 
@@ -1256,25 +1261,26 @@ set_instrument:
     sta    player.instrument.flag, X
     ply
     rts
-
-;;---------------------------------------------------------------------
-; name : portamento_down
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-portamento_down:
+;;
+;; Function: @portamento_down
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@portamento_down:
     ldx    <player.chn
     lda    [player.ptr], Y
     sta    player.frequency.speed, X 
-    beq    @l0
+    beq    @portamento_down.set
+@portamento_down.reset:
         lda    player.frequency.flag, X
         and    #%1111_1100
         ora    #%0000_0001
         sta    player.frequency.flag, X
         iny
         rts
-@l0:
+@portamento_down.set:
         lda    player.frequency.flag, X
         and    #%1111_1100
         sta    player.frequency.flag, X
@@ -1282,25 +1288,26 @@ portamento_down:
         stz    player.frequency.delta.hi, X
         iny
         rts
-
-;;---------------------------------------------------------------------
-; name : portamento_up
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-portamento_up:
+;;
+;; Function: @portamento_up
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@portamento_up:
     ldx    <player.chn
     lda    [player.ptr], Y
     sta    player.frequency.speed, X 
-    beq    @l0
+    beq    @portamento_up.set
+@portamento_up.reset
         lda    player.frequency.flag, X
         and    #%1111_1100
         ora    #%0000_0010
         sta    player.frequency.flag, X
         iny
         rts
-@l0:
+@portamento_up.set:
         lda    player.frequency.flag, X
         and    #%1111_1100
         sta    player.frequency.flag, X
@@ -1308,42 +1315,42 @@ portamento_up:
         stz    player.frequency.delta.hi, X
         iny
         rts
-
-;;---------------------------------------------------------------------
-; name : portamento_to_note
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-portamento_to_note:
+;;
+;; Function: @portamento_to_note
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@portamento_to_note:
     ldx    <player.chn
     lda    [player.ptr], Y
     sta    player.frequency.speed, X 
-    beq    @skip
+    beq    @portamento_to_note.skip
         ; check if we had a new note was triggered
         lda    <player.chn_flag, X
         bit    #%0000_0100
-        beq    @skip
+        beq    @portamento_to_note.skip
             iny
             phy
 
             lda    player.note.previous, X
             pha
             cmp    player.note, X
-            beq    @skip
+            beq    @portamento_to_note.skip
             
             lda    player.frequency.lo, X
             sta    <player.al
             lda    player.frequency.hi, X
             sta    <player.ah
             ora    <player.al
-            bne    @compute
+            bne    @portamento_to_note.compute
                 ldy    player.note.previous, X
                 lda    freq_table.lo, Y
                 sta    <player.al
                 lda    freq_table.hi, Y
                 sta    <player.ah
-@compute:
+@portamento_to_note.compute:
             ldy    player.note, X
             sec
             lda    <player.al
@@ -1355,7 +1362,8 @@ portamento_to_note:
 
             pla 
             cmp    player.note, X
-            bcc    @l0
+            bcc    @portamento_to_note.up
+@portamento_to_note.down:
                 lda    player.frequency.flag, X
                 and    #%1111_0011
                 ora    #%0000_0100
@@ -1363,7 +1371,7 @@ portamento_to_note:
             
                 ply
                 rts
-@l0:
+@portamento_to_note.up:
                 lda    player.frequency.flag, X
                 and    #%1111_0011
                 ora    #%0000_1000
@@ -1371,7 +1379,7 @@ portamento_to_note:
                 
                 ply
                 rts 
-@skip:
+@portamento_to_note.skip:
     stz    player.frequency.delta.lo, X
     stz    player.frequency.delta.hi, X
     
@@ -1381,27 +1389,27 @@ portamento_to_note:
     
     iny
     rts
-
-;;---------------------------------------------------------------------
-; name : arpeggio_speed
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-arpeggio_speed:
+;;
+;; Function: arpeggio_speed
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@arpeggio_speed:
     lda    [player.ptr], Y
     iny
     ldx    <player.chn
     sta    player.arpeggio_speed, X
     rts
-
-;;---------------------------------------------------------------------
-; name : arpeggio
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-arpeggio:
+;;
+;; Function: @arpeggio
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@arpeggio:
     lda    [player.ptr], Y
     iny
     ldx    <player.chn
@@ -1410,45 +1418,45 @@ arpeggio:
     sta    player.arpeggio_tick, X
     stz    <player.current_arpeggio_tick, X
     rts
-
-;;---------------------------------------------------------------------
-; name : enable_noise_channel
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-enable_noise_channel:
+;;
+;; Function: @enable_noise_channel
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@enable_noise_channel:
     ldx    <player.chn
     lda    <player.chn_flag, X
     and    #%1111_1110 
     ora    [player.ptr], Y
     sta    <player.chn_flag, X 
     bit    #$01
-    bne    @end
+    bne    @enable_noise_channel.end
         stz    psg_noise
-@end:
+@enable_noise_channel.end:
     iny
     rts
-
-;;---------------------------------------------------------------------
-; name : panning
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-panning:
+;;
+;; Function: @panning
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@panning:
     lda    [player.ptr], Y
     sta    psg_pan
     iny
     rts
-
-;;---------------------------------------------------------------------
-; name : set_volume
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-set_volume:
+;;
+;; Function: @set_volume
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@set_volume:
     ldx    <player.chn
     lda    <player.chn_flag, X
     ora    #%0000_0110
@@ -1463,18 +1471,18 @@ set_volume:
     pla
 ;    beq    note_off.2
     rts
-
-;;---------------------------------------------------------------------
-; name : note_off
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-note_off:
+;;
+;; Function: note_off
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@note_off:
     ldx    <player.chn
     stz    player.arpeggio, X
     stz    player.vibrato, X
-note_off.2:
+@note_off.2:
     stz    <player.chn_flag, X
     stz    player.frequency.flag, X
     stz    player.instrument.vol.index, X
@@ -1482,29 +1490,28 @@ note_off.2:
     stz    player.frequency.delta.lo, X
     stz    player.frequency.delta.hi, X
     stz    <player.psg_ctrl, X
-    stz    psg_ctrl 
-    
+    stz    psg_ctrl    
     rts
-
-;;---------------------------------------------------------------------
-; name : set_wave
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-set_wave:
+;;
+;; Function: @set_wave
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@set_wave:
     ldx    <player.chn
     ; Copy wave buffer
     lda    [player.ptr], Y
     iny
 
     cmp    player.wave.id, X
-    beq    @skip
+    beq    @set_wave.skip
         jsr    load_wave
-@skip:
+@set_wave.skip:
     ; Restore channel volume
     lda    <player.chn_flag, X
-    beq    @mute
+    beq    @set_wave.mute
         lda    player.volume, X
         lsr    A
         lsr    A
@@ -1512,17 +1519,72 @@ set_wave:
         sta    <player.psg_ctrl, X
         sta    psg_ctrl
         rts
-@mute:
+@set_wave.mute:
     stz    <player.psg_ctrl, X
     stz    psg_ctrl
     rts
+;;
+;; Function: note_on
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@note_on:
+    ldx    <player.chn
+    lda    player.note, X
+    sta    player.note.previous, X
 
-;;---------------------------------------------------------------------
-; name : load_wave
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
+    lda    [player.ptr], Y
+    sta    player.note, X
+    iny
+    
+    lda    <player.chn_flag, X
+    ora    #%0000_0110
+    sta    <player.chn_flag, X 
+  
+    lda    player.frequency.flag, X
+    bit    #%0000_1100
+    bne    @note_on.end
+        stz    player.frequency.delta.lo, X
+        stz    player.frequency.delta.hi, X
+@note_on.end:
+    stz    player.instrument.vol.index, X
+    stz    player.instrument.arp.index, X
+    rts
+;;
+;; Function: @pattern_break
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@pattern_break:
+    ;  data is ignored for now
+    iny
+
+    smb0   <player.flag
+    rts
+;;
+;; Function: @position_jump
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@position_jump:
+    lda    [player.ptr], Y
+    iny
+    sta    player.matrix_pos
+    smb0   <player.flag
+    rts
+;;
+;; Function: load_wave
+;;
+;; Parameters:
+;;
+;; Return:
+;;
 load_wave:
     sta    player.wave.id, X
     stz    <player.si
@@ -1547,61 +1609,6 @@ load_wave:
 
     jsr    wave_upload
         
-    rts
-
-;;---------------------------------------------------------------------
-; name : note_on
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-note_on:
-    ldx    <player.chn
-    lda    player.note, X
-    sta    player.note.previous, X
-
-    lda    [player.ptr], Y
-    sta    player.note, X
-    iny
-    
-    lda    <player.chn_flag, X
-    ora    #%0000_0110
-    sta    <player.chn_flag, X 
-  
-    lda    player.frequency.flag, X
-    bit    #%0000_1100
-    bne    @l0
-        stz    player.frequency.delta.lo, X
-        stz    player.frequency.delta.hi, X
-@l0:
-    stz    player.instrument.vol.index, X
-    stz    player.instrument.arp.index, X
-    rts
-
-;;---------------------------------------------------------------------
-; name : pattern_break
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-pattern_break:
-    ;  data is ignored for now
-    iny
-
-    smb0   <player.flag
-    rts
-
-;;---------------------------------------------------------------------
-; name : position_jump
-; desc : 
-; in   : 
-; out  : 
-;;---------------------------------------------------------------------
-position_jump:
-    lda    [player.ptr], Y
-    iny
-    sta    player.matrix_pos
-    smb0   <player.flag
     rts
 
 ;;---------------------------------------------------------------------
