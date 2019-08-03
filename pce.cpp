@@ -219,8 +219,17 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                         data = (pattern_data.effect[m].data != 0xffff) ? pattern_data.effect[m].data : 0x00;
 
                         // Preprocess / fix
+                        // - Global fine tune
+                        if(pattern_data.effect[m].code == 0xEF) {
+                            if(data > 0x80) {
+                                data -= 0x80;
+                            }
+                            else {
+                                data = (data ^ 0xff) + 1;
+                            }
+                        }
                         // - Volume slide
-                        if(pattern_data.effect[m].code == 0x0A) {
+                        else if(pattern_data.effect[m].code == 0x0A) {
                             if(data > 0x0f) {	
                                 // Positive delta.
                                 data >>= 4;

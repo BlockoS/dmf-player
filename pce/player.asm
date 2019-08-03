@@ -30,6 +30,7 @@ player.r1                       .ds 2
 player.wave_upload.src          .ds 2
 player.psg_ctrl                 .ds PSG_CHAN_COUNT 
 player.delay                    .ds PSG_CHAN_COUNT 
+player.global_detune            .ds 1
 
 _note   .ds 1
 _volume .ds 1
@@ -257,6 +258,8 @@ load_song:
     cpx    #PSG_CHAN_COUNT
     bne    @psg_init
 
+    stz    <player.global_detune
+
     rts
 
 ;;
@@ -271,6 +274,8 @@ update_matrix:
     cmp    player.matrix_rows
     bne    @l0
         stz    player.matrix_pos
+        ; [todo] reset
+        stz    <player.global_detune
 @l0:
     lda    player.matrix
     sta    <player.si
@@ -535,6 +540,8 @@ update_psg:
     sta    <player.al
 
     lda    player.note, X
+    clc
+    adc    <player.global_detune
     sta    <_note
 
     ; -- instrument wave
@@ -1013,11 +1020,28 @@ pattern_data_func:
 @note_slide_down:
 @sync_signal:
 @fine_tune:
-@global_fine_tune:
 @set_sample_bank:
     lda    [player.ptr], Y
     iny
     rts
+
+;;
+;; Function: @global_fine_tune
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@global_fine_tune:
+    lda    [player.ptr], Y
+    iny
+
+    clc
+    adc    <player.global_detune
+    sta    <player.global_detune
+
+    rts
+
 ;;
 ;; Function: @note_delay
 ;;
