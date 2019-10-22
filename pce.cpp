@@ -270,6 +270,8 @@ bool SongPacker::output(Writer& writer)
         // [todo] msg
         return false;
     }
+
+    // writer.writeBinary(_infos, _waveTable, _instruments, _matrix);
     return true;
 }
 

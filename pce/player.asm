@@ -3,16 +3,22 @@
 ; See the accompanying LICENSE file for terms.
 ;;-------_----------------------------------------------------------------------------------
 
+; The song data will be mapped on banks 5 and 6
+DMF_PLAYER_MPR = 5
+
 ;;
-;; Title: VDC Functions.
+;; Title: DMF player.
 ;;
     .zp
 mul8.lo .ds 4
 mul8.hi .ds 4
 
+_song.bank   .ds 1
+
 _song.name   .ds 2
 _song.author .ds 2
 
+player.mpr_backup               .ds 2
 player.chn                      .ds 1
 player.pattern_pos              .ds 1
 player.ptr                      .ds 2
@@ -47,6 +53,7 @@ player.wave              .ds 2
 player.instruments       .ds 2
 player.matrix            .ds 2
 player.matrix_pos        .ds 1
+player.pattern.bank      .ds PSG_CHAN_COUNT
 player.pattern.lo        .ds PSG_CHAN_COUNT
 player.pattern.hi        .ds PSG_CHAN_COUNT
 player.arpeggio_tick     .ds PSG_CHAN_COUNT
@@ -54,6 +61,7 @@ player.arpeggio_speed    .ds PSG_CHAN_COUNT
 
 player.note.previous      .ds PSG_CHAN_COUNT
 player.note               .ds PSG_CHAN_COUNT
+player.detune             .ds PSG_CHAN_COUNT
 player.volume.orig        .ds PSG_CHAN_COUNT
 player.volume             .ds PSG_CHAN_COUNT
 player.volume.delta       .ds PSG_CHAN_COUNT
@@ -124,6 +132,22 @@ Rest               = $40 ; For values between 0 and 63
 ;;---------------------------------------------------------------------
 
     .code
+
+;;
+;; Function: dmf_init
+;;   Initializes player internals.
+;;
+dmf_init:
+    lda    #high(sqr0.lo)
+    sta    <mul8.lo+1
+    lda    #high(sqr1.lo)
+    sta    <mul8.lo+3
+    lda    #high(sqr0.hi)
+    sta    <mul8.hi+1
+    lda    #high(sqr1.hi)
+    sta    <mul8.hi+3
+    rts
+
 ;;
 ;; Function: mul8
 ;; 8 bits unsigned multiplication 16 bits result.
@@ -183,15 +207,52 @@ wave_upload:
     rts
 
 ;;
-;; Function: load_song
+;; Function: dmf_load_song
 ;; Initialize player and load song.
+;;
+;; Parameters:
+;;  <_bl - Song data first bank
+;;  <_si - Pointer to song data
+;;
+;; Return:
+;;
+dmf_load_song:
+    tma    #DMF_PLAYER_MPR
+    pha
+    tma    #DMF_PLAYER_MPR+1
+    pha
+
+    lda    <_bl
+    sta    <_song.bank
+    tam    #DMF_PLAYER_MPR
+    inc    A
+    tam    #DMF_PLAYER_MPR+1
+
+    lda    <_si+1
+    and    #$1f
+    ora    #DMF_PLAYER_MPR<<5
+    sta    <_si+1
+
+    jsr    dmf_load_song.ex
+
+    pla
+    tam    #DMF_PLAYER_MPR+1
+    pla
+    tam    #DMF_PLAYER_MPR
+
+    rts
+
+;;
+;; Function: dmf_load_song.ex
+;; Initialize player and load song.
+;; The song data rom is assumed to have already been mapped.
 ;;
 ;; Parameters:
 ;;  <_si - Pointer to song data
 ;;
 ;; Return:
 ;;
-load_song:
+dmf_load_song.ex:
     ; read song header
     cly
 @copy_header:
@@ -263,6 +324,31 @@ load_song:
     rts
 
 ;;
+;; Function: dmf_update
+;; Song update.
+;;
+dmf_update:
+    tma    #DMF_PLAYER_MPR
+    pha
+    tma    #DMF_PLAYER_MPR+1
+    pha
+    
+    lda    <_song.bank
+    tam    #DMF_PLAYER_MPR
+    inc    A
+    tam    #DMF_PLAYER_MPR+1
+
+    jsr    update_song
+    jsr    update_psg
+
+    pla
+    tam    #DMF_PLAYER_MPR+1
+    pla
+    tam    #DMF_PLAYER_MPR
+
+    rts
+
+;;
 ;; Function: update_matrix
 ;;
 ;; Parameters:
@@ -288,6 +374,17 @@ update_matrix:
     ldy    player.matrix_pos
     clx
 @set_pattern_ptr:
+    lda    [player.si], Y
+    sta    player.pattern.bank, X
+
+    lda    <player.si
+    clc
+    adc    player.matrix_rows
+    sta    <player.si
+    lda    <player.si+1
+    adc    #$00
+    sta    <player.si+1
+
     lda    [player.si], Y
     sta    player.pattern.lo, X
 
@@ -400,6 +497,10 @@ update_chan:
     ldx    <player.chn
     lda    <player.rest, X
     bne    @dec_rest
+        lda    player.pattern.bank, X
+        tam    #DMF_PLAYER_MPR
+        inc    A
+        tam    #DMF_PLAYER_MPR+1
         lda    player.pattern.lo, X
         sta    <player.ptr
         lda    player.pattern.hi, X 
@@ -766,6 +867,44 @@ update_psg:
     bbr2   <player.al, @l0
         rmb2   <player.al
         bbs0   <player.al, @noise
+
+            ; [todo] flag for detune enable/disabled
+;            lda    player.detune, X
+;            bpl    @detune.plus
+;@detune.minus:
+;                ldy    <_note
+;                sec
+;                lda    freq_table.lo-1, Y
+;                sbc    freq_table.lo, Y
+;                ; [todo] load detune
+;                ; [todo] mul8
+;                lsr    A
+;                lsr    A
+;                lsr    A
+;                lsr    A
+;                ; [todo] _freq += result
+;                bra    @detune.reset
+;@detune.plus:
+;                ldy    <_note
+;                sec
+;                lda    freq_table.lo, Y
+;                sbc    freq_table.lo+1, Y
+;                ; [todo] load detune
+;                ; [todo] mul8
+;                lsr    A
+;                lsr    A
+;                lsr    A
+;                lsr    A
+;                ; [todo] _freq -= result
+;                bra    @detune.reset            
+;@detune.reset:
+;            stz    player.detune , X
+
+            ; [todo] if player.detune, X > 0
+            ; [todo]    a = current
+            ; [todo]    b = freq_table[<_note+1]
+            ; [todo]    freq += (b - a) * detune / 16
+            
             ldy    <_note
             lda    freq_table.lo, Y
             clc
@@ -1019,10 +1158,22 @@ pattern_data_func:
 @note_slide_up:
 @note_slide_down:
 @sync_signal:
-@fine_tune:
 @set_sample_bank:
     lda    [player.ptr], Y
     iny
+    rts
+
+;;
+;; Function: @fine_tune
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+@fine_tune:
+    lda    [player.ptr], Y
+    iny
+    sta    player.detune , X
     rts
 
 ;;

@@ -67,6 +67,7 @@ PSG_CTRL_FULL_VOLUME    .equ %0011_1111 ; channel maximum volume (bit 5 is unuse
 PSG_VOLUME_MAX = $1f ; Maximum volume value
 
     .zp
+_bl         .ds 1
 _si         .ds 2
 _vdc_reg    .ds 1
 _vdc_ctrl   .ds 1
@@ -225,24 +226,15 @@ irq_reset:
     cpx    #PSG_CHAN_COUNT
     bne    .l1
 
-    lda    #high(sqr0.lo)
-    sta    <mul8.lo+1
-    lda    #high(sqr1.lo)
-    sta    <mul8.lo+3
-    lda    #high(sqr0.hi)
-    sta    <mul8.hi+1
-    lda    #high(sqr1.hi)
-    sta    <mul8.hi+3
+    jsr    dmf_init
 
     lda    #bank(song)
-    tam    #page(song)
-    inc    A
-    tam    #(page(song)+1)
+    sta    <_bl
     lda    #low(song)
     sta    <_si
     lda    #high(song)
     sta    <_si+1
-    jsr    load_song
+    jsr    dmf_load_song
 
     cli
     
@@ -272,8 +264,7 @@ irq_reset:
     sta    color_data
     stz    color_data+1
 
-    jsr    update_song
-    jsr    update_psg
+    jsr    dmf_update
 
     stz    color_reg
     stz    color_reg+1
@@ -297,14 +288,15 @@ irq_reset:
     bra    .loop
 
     .include "player.asm"
+    .include "frequency.inc"
 
     .data
     .bank 1
-	.org $4000
+	.org $A000
 
 ; [todo::begin] dummy song
 song:
     .include "song.asm"
 song.size = * - song
 ; [todo::end] dummy song
-    .include "frequency.inc"
+

@@ -5,8 +5,6 @@
 #include <cstring>
 #include <cerrno>
 
-#include <iostream>
-
 #include "pcewriter.h"
 
 #define MAX_SONG_PREFIX 32
@@ -97,7 +95,7 @@ bool Writer::writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLi
     return true;
 }
 
-bool Writer::writePointerTable(const char* pointerBasename, size_t start, size_t count, size_t elementsPerLine) {
+bool Writer::writePointerTable(const char* pointerBasename, size_t start, size_t count, size_t elementsPerLine, bool bank) {
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "dwl", "dwh" };
     
@@ -106,6 +104,17 @@ bool Writer::writePointerTable(const char* pointerBasename, size_t start, size_t
     if((elementCharLen*elementsPerLine) >= MAX_CHAR_PER_LINE) {
 		elementsPerLine = MAX_CHAR_PER_LINE / elementCharLen;
 	}
+
+    if(bank) {
+        fprintf(_output, "%s.%s.bank:\n", _prefix.c_str(), pointerBasename);
+        for(size_t i=0; i<count;) {
+            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            fprintf(_output, "    .db ");
+            for(size_t j=0; j<last; j++, i++) {
+                fprintf(_output, "bank(%s.%s_%04x)%c", _prefix.c_str(), pointerBasename, static_cast<uint32_t>(start+i), (j<(last-1))?',':'\n');
+            }            
+        }
+    }
     
     for(int p=0; p<2; p++) {
         fprintf(_output, "%s.%s.%s:\n", _prefix.c_str(), pointerBasename, postfix[p]);
@@ -120,7 +129,7 @@ bool Writer::writePointerTable(const char* pointerBasename, size_t start, size_t
     return true;
 }
 
-bool Writer::writePointerTable(const char* table, const char* element, const std::vector<int>& index, size_t elementsPerLine) {
+bool Writer::writePointerTable(const char* table, const char* element, const std::vector<int>& index, size_t elementsPerLine, bool bank) {
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "dwl", "dwh" };
     
@@ -131,6 +140,17 @@ bool Writer::writePointerTable(const char* table, const char* element, const std
 	}
     
     size_t count = index.size();
+
+    if(bank) {
+        fprintf(_output, "%s.%s.bank:\n", _prefix.c_str(), table);
+        for(size_t i=0; i<count;) {
+            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            fprintf(_output, "    .db ");
+            for(size_t j=0; j<last; j++, i++) {
+                fprintf(_output, "bank(%s.%s_%04x)%c", _prefix.c_str(), element, index[i], (j<(last-1))?',':'\n');
+            }
+        }
+    }
 
     for(int p=0; p<2; p++) {
         fprintf(_output, "%s.%s.%s:\n", _prefix.c_str(), table, postfix[p]);
@@ -208,7 +228,7 @@ bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> c
             pattern_index[j] = index + matrix[i].pattern[j];
         }
         snprintf(name, 256, "matrix_%04x", static_cast<uint32_t>(i));
-        if(!writePointerTable(name, "pattern", pattern_index, 16)) {
+        if(!writePointerTable(name, "pattern", pattern_index, 16, true)) {
             return false;
         }
         index += matrix[i].packed.size();
@@ -226,6 +246,73 @@ bool Writer::writePatternData(PCE::PatternMatrix const& pattern, size_t& index) 
     for(size_t j=0; ret && (j<pattern.buffer.size()); j++) {
         fprintf(_output, "%s.pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
         ret = writeBytes(pattern.buffer[j].data(), pattern.buffer[j].size(), 16);
+    }
+    return ret;
+}
+
+bool Writer::writeBinary(DMF::Infos const& infos, std::vector<WaveTable> const& wavetable, InstrumentList const& instruments, std::vector<PatternMatrix> const& matrix) {
+    bool ret = true;
+    char filename[256];
+    int index = 0;
+
+    std::vector<uint8_t> buffer;
+
+    for(size_t i=0; i<wavetable.size(); i++) {
+        buffer.insert(buffer.end(), wavetable[i].begin(), wavetable[i].end());
+    }
+
+    uint32_t offset = InstrumentList::EnvelopeCount * (instruments.count*4);
+    for(size_t i=0; i<InstrumentList::EnvelopeCount; i++) {
+        buffer.insert(buffer.end(), instruments.env[i].size.begin(), instruments.env[i].size.begin()+instruments.count);
+        buffer.insert(buffer.end(), instruments.env[i].loop.begin(), instruments.env[i].loop.begin()+instruments.count);
+
+        size_t start = buffer.size();
+        size_t n = instruments.count;
+        buffer.resize(start + 2*n);
+        for(size_t j=0; j<instruments.count; j++) {
+            buffer[j  ] = offset & 0xff;
+            buffer[j+n] = (offset >> 8) & 0xff;
+            offset+= instruments.env[i].size[j];
+        } 
+    }
+    buffer.insert(buffer.end(), instruments.flag.begin(), instruments.flag.begin()+instruments.count);
+
+    for(size_t i=0; i<InstrumentList::EnvelopeCount; i++) {
+        for(unsigned int j=0; ret && (j<instruments.count); j++) {
+            if(instruments.env[i].size[j]) {
+                buffer.insert(buffer.end(), instruments.env[i].data[j].begin(), instruments.env[i].data[j].begin()+instruments.env[i].size[j]);
+            }
+        }
+    }
+
+    offset = 0;
+    for(size_t i=0; i<infos.systemChanCount; i++) {
+        size_t start = buffer.size();
+        size_t n = matrix[i].pattern.size();
+        buffer.resize(start + 2*n);
+        for(size_t j=0; j<n; j++) {
+            size_t k = matrix[i].pattern[j];
+            buffer[j  ] = offset & 0xff;
+            buffer[j+n] = (offset >> 8) & 0xff;
+            offset += matrix[i].buffer[k].size();
+        }
+    }
+
+    for(size_t i=0; i<infos.systemChanCount; i++) {
+        for(size_t j=0; j<matrix[i].buffer.size(); j++) {
+            buffer.insert(buffer.end(), matrix[i].buffer[j].begin(), matrix[i].buffer[j].end());
+        }
+    }
+
+    index=0;
+    for(size_t i=0; i<buffer.size(); index++, i+=8192) {
+        FILE *out;
+        size_t len = (buffer.size() - i);
+        if(len > 8192) len = 8192;
+        snprintf(filename, 256, "%s_%04x.bin", _prefix.c_str(), index);
+        out = fopen(filename, "wb");
+        fwrite(&buffer[i], 1, len, out);
+        fclose(out);
     }
     return ret;
 }

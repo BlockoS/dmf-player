@@ -26,10 +26,12 @@ namespace PCE {
             bool writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix);
             bool writeInstruments(InstrumentList const& instruments);
 
+            bool writeBinary(DMF::Infos const& infos, std::vector<WaveTable> const& wavetable, InstrumentList const& instruments, std::vector<PatternMatrix> const& matrix);
+
         private:
             bool writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLine);
-            bool writePointerTable(const char* pointerBasename, size_t start, size_t count, size_t elementsPerLine);
-            bool writePointerTable(const char* table, const char* element, const std::vector<int>& index, size_t elementsPerLine);
+            bool writePointerTable(const char* pointerBasename, size_t start, size_t count, size_t elementsPerLine, bool bank=false);
+            bool writePointerTable(const char* table, const char* element, const std::vector<int>& index, size_t elementsPerLine, bool bank=false);
 
             bool writePatternData(PCE::PatternMatrix const& pattern, size_t& index);
             template <typename T>
