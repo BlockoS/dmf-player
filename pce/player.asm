@@ -4,7 +4,8 @@
 ;;-------_----------------------------------------------------------------------------------
 
 ; The song data will be mapped on banks 5 and 6
-DMF_PLAYER_MPR = 5
+DMF_HEADER_MPR = 4
+DMF_DATA_MPR = 5
 
 ;;
 ;; Title: DMF player.
@@ -176,37 +177,6 @@ mul8:
     rts
 
 ;;
-;; Function: wave_upload
-;;
-;; Parameters:
-;;
-;; Return:
-;;
-wave_upload:
-    phy
-    cly
-    lda    player.volume, X
-    lsr    A
-    lsr    A
-    ora    #$80
-    pha
-    sta    psg_ctrl
-
-    stz    psg_ctrl
-@l0:
-    lda    [player.wave_upload.src], Y
-    iny
-    sta    psg_wavebuf
-    cpy    #$20
-    bne    @l0
-    
-    pla
-    sta    psg_ctrl
-    ply
-
-    rts
-
-;;
 ;; Function: dmf_load_song
 ;; Initialize player and load song.
 ;;
@@ -217,28 +187,26 @@ wave_upload:
 ;; Return:
 ;;
 dmf_load_song:
-    tma    #DMF_PLAYER_MPR
+    tma    #DMF_HEADER_MPR
     pha
-    tma    #DMF_PLAYER_MPR+1
+    tma    #DMF_DATA_MPR
     pha
-
+    
     lda    <_bl
     sta    <_song.bank
-    tam    #DMF_PLAYER_MPR
-    inc    A
-    tam    #DMF_PLAYER_MPR+1
+    tam    #DMF_HEADER_MPR
 
     lda    <_si+1
     and    #$1f
-    ora    #DMF_PLAYER_MPR<<5
+    ora    #DMF_HEADER_MPR<<5
     sta    <_si+1
 
     jsr    dmf_load_song.ex
 
     pla
-    tam    #DMF_PLAYER_MPR+1
+    tam    #DMF_DATA_MPR
     pla
-    tam    #DMF_PLAYER_MPR
+    tam    #DMF_HEADER_MPR
 
     rts
 
@@ -328,24 +296,22 @@ dmf_load_song.ex:
 ;; Song update.
 ;;
 dmf_update:
-    tma    #DMF_PLAYER_MPR
+    tma    #DMF_HEADER_MPR
     pha
-    tma    #DMF_PLAYER_MPR+1
+    tma    #DMF_DATA_MPR
     pha
     
     lda    <_song.bank
-    tam    #DMF_PLAYER_MPR
-    inc    A
-    tam    #DMF_PLAYER_MPR+1
+    tam    #DMF_HEADER_MPR
 
     jsr    update_song
     jsr    update_psg
 
     pla
-    tam    #DMF_PLAYER_MPR+1
+    tam    #DMF_DATA_MPR
     pla
-    tam    #DMF_PLAYER_MPR
-
+    tam    #DMF_HEADER_MPR
+    
     rts
 
 ;;
@@ -498,9 +464,7 @@ update_chan:
     lda    <player.rest, X
     bne    @dec_rest
         lda    player.pattern.bank, X
-        tam    #DMF_PLAYER_MPR
-        inc    A
-        tam    #DMF_PLAYER_MPR+1
+        tam    #DMF_DATA_MPR
         lda    player.pattern.lo, X
         sta    <player.ptr
         lda    player.pattern.hi, X 
@@ -629,7 +593,18 @@ update_psg:
 ;;
 ;; Return:
 ;;
+; [todo] cut this into multiple subroutines
 @update_psg.ch:
+;    if(player.delay[X]) {
+;        player.delay[X]--;
+;        return;
+;    }
+;    
+;
+;
+;
+;
+;
     lda    <player.delay, X
     beq    @no_delay
         dec    <player.delay, X
@@ -1159,6 +1134,7 @@ pattern_data_func:
 @note_slide_down:
 @sync_signal:
 @set_sample_bank:
+@bozo:
     lda    [player.ptr], Y
     iny
     rts
@@ -1507,12 +1483,13 @@ pattern_data_func:
         bit    #%0000_0100
         beq    @portamento_to_note.skip
             iny
-            phy
 
             lda    player.note.previous, X
-            pha
             cmp    player.note, X
             beq    @portamento_to_note.skip
+
+            phy
+            pha
             
             lda    player.frequency.lo, X
             sta    <player.al
@@ -1781,9 +1758,38 @@ load_wave:
     lda    player.wave+1
     adc    <player.si+1
     sta    <player.wave_upload.src+1
+    
+    ; Warning !!!  Do not put anything inbetween.
+    
+;;
+;; Function: wave_upload
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+wave_upload:
+    phy
+    cly
+    lda    player.volume, X
+    lsr    A
+    lsr    A
+    ora    #$80
+    pha
+    sta    psg_ctrl
 
-    jsr    wave_upload
-        
+    stz    psg_ctrl
+@l0:
+    lda    [player.wave_upload.src], Y
+    iny
+    sta    psg_wavebuf
+    cpy    #$20
+    bne    @l0
+    
+    pla
+    sta    psg_ctrl
+    ply
+
     rts
 
 ;;---------------------------------------------------------------------

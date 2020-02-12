@@ -292,7 +292,7 @@ irq_reset:
 
     .data
     .bank 1
-	.org $A000
+	.org $8000
 
 ; [todo::begin] dummy song
 song:
