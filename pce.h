@@ -43,7 +43,7 @@ namespace PCE {
         SetSampleBank,
         SetVolume,
         SetInstrument,
-        Note,                       // Set note+octave
+        Note,                      // Set note+octave
         NoteOff,
         RestEx             = 0x3f, // For values >= 64
         Rest               = 0x40, // For values between 0 and 63

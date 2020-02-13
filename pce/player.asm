@@ -410,8 +410,8 @@ fetch_pattern:
         sec
         rts
 @check_rest:
-    cmp    #$80
-    bcs    @fetch
+    pha
+    and    #$7f
     cmp    #$3f
     bcc    @fetch
     beq    @rest_ex
@@ -425,11 +425,9 @@ fetch_pattern:
         ldx    <player.chn
         dec    a
         sta    <player.rest, X
+        pla
         bra    @inc_ptr
 @fetch
-    pha 
-    
-    and   #$7f
     asl   A
     tax
 
@@ -1119,6 +1117,7 @@ pattern_data_func:
     .dw @set_instrument
     .dw @note_on
     .dw @note_off
+    
 ;;---------------------------------------------------------------------
 @vibrato_mode:
 @vibrato_depth:
@@ -1134,7 +1133,6 @@ pattern_data_func:
 @note_slide_down:
 @sync_signal:
 @set_sample_bank:
-@bozo:
     lda    [player.ptr], Y
     iny
     rts

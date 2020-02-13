@@ -18,7 +18,6 @@ namespace PCE {
             bool open();
             void close();
             
-            // [todo] rename
             bool write(DMF::Infos const& infos, size_t instrument_count);
             bool write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern);
             bool write(std::vector<WaveTable> const& wavetable);
@@ -41,6 +40,8 @@ namespace PCE {
             std::string _filename;
             std::string _prefix;
             FILE       *_output;
+            size_t      _output_bytes;
+            uint32_t    _bank;
     };
 
     template <typename T>

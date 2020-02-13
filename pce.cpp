@@ -255,19 +255,19 @@ void SongPacker::packPatternData(DMF::Song const& song) {
 bool SongPacker::output(Writer& writer)
 {
     if(!writer.write(_infos, _instruments.count)) {
-        // [todo] msg
+        fprintf(stderr, "Failed to write infos.\n");
         return false;
     }
     if(!writer.write(_waveTable)) {
-        // [todo] msg
+        fprintf(stderr, "Failed to write wave buffers.\n");
         return false;
     }
     if(!writer.writeInstruments(_instruments)) {
-        // [todo] msg
+        fprintf(stderr, "Failed to write instruments.\n");
         return false;
     }
     if(!writer.writePatterns(_infos, _matrix)) {
-        // [todo] msg
+        fprintf(stderr, "Failed to write wave patterns.\n");
         return false;
     }
 

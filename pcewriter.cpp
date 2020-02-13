@@ -52,8 +52,14 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
     else {
         _prefix = "song";
     }
-    
-    fprintf(_output, "%s.timeBase:        .db $%02x\n"
+
+    _bank = 0;
+
+    fprintf(_output, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_HEADER_MPR << 13)\n", _bank);
+    _bank++;
+
+    fprintf(_output, "%s:\n"
+                     "%s.timeBase:        .db $%02x\n"
                      "%s.timeTick:        .db $%02x, $%02x\n"
                      "%s.patternRows:     .db $%02x\n"
                      "%s.matrixRows:      .db $%02x\n"
@@ -62,6 +68,7 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
                      "    .dw %s.wave\n"
                      "    .dw %s.instruments\n"
                      "    .dw %s.matrix\n",
+                     _prefix.c_str(),
                      _prefix.c_str(), infos.timeBase,
                      _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
                      _prefix.c_str(), infos.totalRowsPerPattern,
@@ -138,7 +145,7 @@ bool Writer::writePointerTable(const char* table, const char* element, const std
     if((elementCharLen*elementsPerLine) >= MAX_CHAR_PER_LINE) {
 		elementsPerLine = MAX_CHAR_PER_LINE / elementCharLen;
 	}
-    
+
     size_t count = index.size();
 
     if(bank) {
@@ -234,6 +241,7 @@ bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> c
         index += matrix[i].packed.size();
     }
 
+    _output_bytes = 8192;
     index = 0;
     for(size_t i=0; ret && (i<infos.systemChanCount); i++) {
         ret = writePatternData(matrix[i], index);
@@ -244,8 +252,15 @@ bool Writer::writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> c
 bool Writer::writePatternData(PCE::PatternMatrix const& pattern, size_t& index) {
     bool ret = true;
     for(size_t j=0; ret && (j<pattern.buffer.size()); j++) {
+        size_t next = _output_bytes + pattern.buffer[j].size();
+        if(next >= 8192) {
+            fprintf(_output, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_DATA_MPR << 13)\n", _bank);
+            _bank++;
+            _output_bytes = 0;
+        }
         fprintf(_output, "%s.pattern_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(index++));
         ret = writeBytes(pattern.buffer[j].data(), pattern.buffer[j].size(), 16);
+        _output_bytes += pattern.buffer[j].size();
     }
     return ret;
 }

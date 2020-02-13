@@ -228,7 +228,7 @@ irq_reset:
 
     jsr    dmf_init
 
-    lda    #bank(song)
+    lda    #bank(song)              ; Change this if the song label changes (and it will most likely).
     sta    <_bl
     lda    #low(song)
     sta    <_si
@@ -290,13 +290,8 @@ irq_reset:
     .include "player.asm"
     .include "frequency.inc"
 
-    .data
-    .bank 1
-	.org $8000
-
+DMF_DATA_ROM_BANK = 1
 ; [todo::begin] dummy song
-song:
     .include "song.asm"
-song.size = * - song
 ; [todo::end] dummy song
 
