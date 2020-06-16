@@ -573,15 +573,15 @@ update_psg:
     sta    psg_ctrl
 
     clx
-    jsr    @update_psg.ch
+    bsr    @update_psg.ch
     ldx    #$01
-    jsr    @update_psg.ch
+    bsr    @update_psg.ch
     ldx    #$02
-    jsr    @update_psg.ch
+    bsr    @update_psg.ch
     ldx    #$03
-    jsr    @update_psg.ch
+    bsr    @update_psg.ch
     ldx    #$04
-    jsr    @update_psg.ch
+    bsr    @update_psg.ch
     ldx    #$05
 ;    jmp    update_psg.ch
 ;;
@@ -1117,7 +1117,7 @@ pattern_data_func:
     .dw @set_instrument
     .dw @note_on
     .dw @note_off
-    
+
 ;;---------------------------------------------------------------------
 @vibrato_mode:
 @vibrato_depth:
@@ -1635,8 +1635,7 @@ pattern_data_func:
 @note_off.2:
     stz    <player.chn_flag, X
     stz    player.frequency.flag, X
-    stz    player.instrument.vol.index, X
-    stz    player.instrument.arp.index, X
+    stz    player.instrument.flag, X
     stz    player.frequency.delta.lo, X
     stz    player.frequency.delta.hi, X
     stz    <player.psg_ctrl, X
@@ -1723,6 +1722,9 @@ pattern_data_func:
 ;; Return:
 ;;
 @position_jump:
+    iny                         ; [todo] add a extra byte to store the id of the position jump in order to avoid infinite loops
+    rts
+
     lda    [player.ptr], Y
     iny
     sta    player.matrix_pos

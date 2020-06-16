@@ -88,6 +88,8 @@ class DataReader {
         /// Reorganize pattern data in order to match matrix indices.
         void fixPatterns(Song &song);
 
+        void fixInstruments(Song &song);
+
     private:
         /// Input byte buffer.
         std::vector<uint8_t> _buffer;

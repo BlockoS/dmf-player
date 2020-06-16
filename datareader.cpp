@@ -429,6 +429,7 @@ bool DataReader::read(Song &song) {
     
     // Reorganize patter data...
     fixPatterns(song);
+    fixInstruments(song);
 
     return true;
 }
@@ -496,6 +497,16 @@ void DataReader::fixPatterns(Song &song) {
     }
     song.patternData = std::move(data);
 }
+
+void DataReader::fixInstruments(Song &song) {
+    for(size_t i=0; i<song.instrument.size(); i++) {
+        Instrument::Standard &std = song.instrument[i].std;
+        for(size_t j=0; j<std.wave.size; j++) {
+            std.wave.value[j] %= song.waveTable.size();
+        }
+    }
+}
+
 
 
 } // DMF

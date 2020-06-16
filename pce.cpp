@@ -215,6 +215,13 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
                     if(pattern_data.effect[m].code != 0xffff) {
+                        last = _matrix[i].buffer[j].size();
+                        _matrix[i].buffer[j].push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
+                        // - Note cut
+                        if(pattern_data.effect[m].code == 0xEC) {
+                            continue;
+                        }
+
                         uint8_t data;
                         data = (pattern_data.effect[m].data != 0xffff) ? pattern_data.effect[m].data : 0x00;
 
@@ -239,8 +246,6 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                                 data = ((data & 0x0f) ^ 0xff) + 1;
                             }
                         }
-                        last = _matrix[i].buffer[j].size();
-                        _matrix[i].buffer[j].push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
                         _matrix[i].buffer[j].push_back(data);
                     }
                 } // effects
