@@ -593,16 +593,6 @@ update_psg:
 ;;
 ; [todo] cut this into multiple subroutines
 @update_psg.ch:
-;    if(player.delay[X]) {
-;        player.delay[X]--;
-;        return;
-;    }
-;    
-;
-;
-;
-;
-;
     lda    <player.delay, X
     beq    @no_delay
         dec    <player.delay, X
