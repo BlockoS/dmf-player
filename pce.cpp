@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 #include "pce.h"
 #include "pcewriter.h"
@@ -95,8 +96,7 @@ void SongPacker::pack(DMF::Song const& song) {
         }
     }
     
-    // [todo] samples!
-    
+    packSamples(song);
     packPatternMatrix(song);
     packPatternData(song);
 }
@@ -257,6 +257,23 @@ void SongPacker::packPatternData(DMF::Song const& song) {
     } 
 }
 
+void SongPacker::packSamples(DMF::Song const& song) {
+    _samples.resize(song.sample.size());
+    for(size_t i=0; i<song.sample.size(); i++) {
+        DMF::Sample const& current = song.sample[i];
+        float scale = static_cast<float>(1 << current.bits);
+        float db = 2.f*current.amp - 100.f;
+        float gain = powf(10.f, db/20.f) / scale;
+
+        _samples[i].rate = current.rate;
+        for(size_t j=0; j<current.data.size(); j+=current.pitch) {
+            float v = current.data[j] * gain;
+            v = (v < 0.0) ? 0.0 : ((v > 1.0) ? 1.0 : v);
+            _samples[i].data.push_back(v * 31);
+        }
+    }
+}
+
 bool SongPacker::output(Writer& writer)
 {
     if(!writer.write(_infos, _instruments.count)) {
@@ -273,6 +290,10 @@ bool SongPacker::output(Writer& writer)
     }
     if(!writer.writePatterns(_infos, _matrix)) {
         fprintf(stderr, "Failed to write wave patterns.\n");
+        return false;
+    }
+    if(!writer.writeSamples(_samples)) {
+        fprintf(stderr, "Failed to write samples.\n");
         return false;
     }
 

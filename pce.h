@@ -80,6 +80,11 @@ namespace PCE {
 
     typedef std::vector<uint8_t> WaveTable;
 
+    struct Sample {
+        int rate;
+        std::vector<uint8_t> data;
+    };
+
     class Writer;
     
     class SongPacker {
@@ -93,12 +98,14 @@ namespace PCE {
         private:
             void packPatternMatrix(DMF::Song const& song);
             void packPatternData(DMF::Song const& song);
+            void packSamples(DMF::Song const& song);
 
         private:
             DMF::Infos _infos;
             std::vector<WaveTable>     _waveTable;
             InstrumentList             _instruments;
             std::vector<PatternMatrix> _matrix;
+            std::vector<Sample>        _samples;
     };
 }
 

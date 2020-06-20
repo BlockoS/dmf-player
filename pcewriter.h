@@ -25,6 +25,8 @@ namespace PCE {
             bool writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix);
             bool writeInstruments(InstrumentList const& instruments);
 
+            bool writeSamples(std::vector<Sample> const& samples);
+
             bool writeBinary(DMF::Infos const& infos, std::vector<WaveTable> const& wavetable, InstrumentList const& instruments, std::vector<PatternMatrix> const& matrix);
 
         private:

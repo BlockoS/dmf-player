@@ -342,4 +342,44 @@ bool Writer::write(std::vector<WaveTable> const& wavetable) {
     return ret;
 }
 
+/* [todo]
+bool Writer::writeSamplesInfos(std::vector<Sample> const& samples) {
+   
+    offset = sample_bank*12
+    offset = sample_bank*(8+4)
+    offset = (sample_bank<<1 + sample_bank) << 2 // <= player code
+    
+    write sample rate
+    write sample size (lo)
+    write samples size (hi)
+    write sample bank
+    write sample offset (lo)
+    write sample offset (hi)
+}
+*/
+
+bool Writer::writeSamples(std::vector<Sample> const& samples) {
+    bool ret = true;
+
+    for(size_t j=0; ret && (j<samples.size()); j++) {
+        size_t start = 0;
+        size_t end = samples[j].data.size();
+        fprintf(_output, "%s.sample_%04x:\n", _prefix.c_str(), static_cast<uint32_t>(j));      
+        while(ret && (start < end)) {
+            size_t count = ((start+16) > end) ? (end-start) : 16;
+            size_t next = _output_bytes + count;
+            if(next >= 8192) {
+                fprintf(_output, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_DATA_MPR << 13)\n", _bank);
+                _bank++;
+                _output_bytes = 0;
+            }
+            ret = writeBytes(samples[j].data.data()+start, count, 16);
+            _output_bytes += count;
+            start += count;
+        }
+    }
+    return ret;
+}
+
+
 } // PCE
