@@ -372,7 +372,7 @@ bool Writer::writeSamplesInfos(std::vector<Sample> const& samples, size_t elemen
         }
         fprintf(_output, "%s.samples.offset.%s:\n", _prefix.c_str(), postfix[p]);
         for(size_t i=0; i<count;) {
-            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            size_t last = ((i+4) < count) ? 4 : (count-i);
             fprintf(_output, "    .%s ", op[p]);
             for(size_t j=0; j<last; j++, i++) {
                 fprintf(_output, "%s.sample_%04x%c", _prefix.c_str(), static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
@@ -381,7 +381,7 @@ bool Writer::writeSamplesInfos(std::vector<Sample> const& samples, size_t elemen
     }
     fprintf(_output, "%s.samples.bank:\n", _prefix.c_str());
     for(size_t i=0; i<count;) {
-        size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+        size_t last = ((i+4) < count) ? 4 : (count-i);
         fprintf(_output, "    .db ");
         for(size_t j=0; j<last; j++, i++) {
             fprintf(_output, "bank(%s.sample_%04x)%c", _prefix.c_str(), static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
