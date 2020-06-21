@@ -81,7 +81,7 @@ namespace PCE {
     typedef std::vector<uint8_t> WaveTable;
 
     struct Sample {
-        int rate;
+        uint32_t rate;
         std::vector<uint8_t> data;
     };
 

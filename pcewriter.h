@@ -25,6 +25,7 @@ namespace PCE {
             bool writePatterns(DMF::Infos const& infos, std::vector<PatternMatrix> const& matrix);
             bool writeInstruments(InstrumentList const& instruments);
 
+            bool writeSamplesInfos(std::vector<Sample> const& samples, size_t elementsPerLine);
             bool writeSamples(std::vector<Sample> const& samples);
 
             bool writeBinary(DMF::Infos const& infos, std::vector<WaveTable> const& wavetable, InstrumentList const& instruments, std::vector<PatternMatrix> const& matrix);
@@ -35,8 +36,6 @@ namespace PCE {
             bool writePointerTable(const char* table, const char* element, const std::vector<int>& index, size_t elementsPerLine, bool bank=false);
 
             bool writePatternData(PCE::PatternMatrix const& pattern, size_t& index);
-            template <typename T>
-            void writeBuffer(std::vector<T> const& buffer, size_t elementsPerLine);
         
         private:
             std::string _filename;
@@ -45,17 +44,5 @@ namespace PCE {
             size_t      _output_bytes;
             uint32_t    _bank;
     };
-
-    template <typename T>
-    void Writer::writeBuffer(std::vector<T> const& buffer, size_t elementsPerLine) {
-        for(size_t i=0; i<buffer.size(); ) {
-            size_t last = ((elementsPerLine+i)<buffer.size()) ? elementsPerLine : (buffer.size()-i);
-            fprintf(_output, "    .db ");
-            for(size_t j=0; j<last; j++, i++) {
-                fprintf(_output,"$%02x%c", buffer[i], ((j+1) < last) ? ',' : '\n');
-            }
-        }
-    }
-
 }
 #endif // PCE_WRITER_H

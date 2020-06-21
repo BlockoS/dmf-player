@@ -67,13 +67,15 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
                      "%s.pointers:\n"
                      "    .dw %s.wave\n"
                      "    .dw %s.instruments\n"
-                     "    .dw %s.matrix\n",
+                     "    .dw %s.matrix\n"
+                     "    .dw %s.samples\n",
                      _prefix.c_str(),
                      _prefix.c_str(), infos.timeBase,
                      _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
                      _prefix.c_str(), infos.totalRowsPerPattern,
                      _prefix.c_str(), infos.totalRowsInPatternMatrix,
                      _prefix.c_str(), (uint8_t)instrument_count,
+                     _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),
@@ -342,21 +344,55 @@ bool Writer::write(std::vector<WaveTable> const& wavetable) {
     return ret;
 }
 
-/* [todo]
-bool Writer::writeSamplesInfos(std::vector<Sample> const& samples) {
-   
-    offset = sample_bank*12
-    offset = sample_bank*(8+4)
-    offset = (sample_bank<<1 + sample_bank) << 2 // <= player code
-    
-    write sample rate
-    write sample size (lo)
-    write samples size (hi)
+bool Writer::writeSamplesInfos(std::vector<Sample> const& samples, size_t elementsPerLine) {
+    static char const* postfix[] = { "lo", "hi" };
+    static char const* op[] = { "dwl", "dwh" };
+    const size_t count = samples.size();
+
+    bool ret = true;
+
+    fprintf(_output, "%s.samples:\n", _prefix.c_str());    
+    fprintf(_output, "%s.samples.count:\n    .db $%02x\n", _prefix.c_str(), static_cast<uint32_t>(count));    
+    for(int p=0; p<2; p++) {
+        fprintf(_output, "%s.samples.size.%s:\n", _prefix.c_str(), postfix[p]);
+        for(size_t i=0; i<count;) {
+            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            fprintf(_output, "    .%s ", op[p]);
+            for(size_t j=0; j<last; j++, i++) {
+                fprintf(_output, "$%04x%c", static_cast<uint32_t>(samples[i].data.size()), (j<(last-1))?',':'\n');
+            }
+        }
+        fprintf(_output, "%s.samples.rate.%s:\n", _prefix.c_str(), postfix[p]);
+        for(size_t i=0; i<count;) {
+            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            fprintf(_output, "    .%s ", op[p]);
+            for(size_t j=0; j<last; j++, i++) {
+                fprintf(_output, "$%04x%c", static_cast<uint32_t>(samples[i].rate), (j<(last-1))?',':'\n');
+            }
+        }
+        fprintf(_output, "%s.samples.offset.%s:\n", _prefix.c_str(), postfix[p]);
+        for(size_t i=0; i<count;) {
+            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+            fprintf(_output, "    .%s ", op[p]);
+            for(size_t j=0; j<last; j++, i++) {
+                fprintf(_output, "%s.sample_%04x%c", _prefix.c_str(), static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
+            }
+        }
+    }
+    fprintf(_output, "%s.samples.bank:\n", _prefix.c_str());
+    for(size_t i=0; i<count;) {
+        size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
+        fprintf(_output, "    .db ");
+        for(size_t j=0; j<last; j++, i++) {
+            fprintf(_output, "bank(%s.sample_%04x)%c", _prefix.c_str(), static_cast<uint32_t>(i), (j<(last-1))?',':'\n');
+        }
+    }
+
+/*
     write sample bank
-    write sample offset (lo)
-    write sample offset (hi)
-}
 */
+    return ret;
+}
 
 bool Writer::writeSamples(std::vector<Sample> const& samples) {
     bool ret = true;

@@ -503,6 +503,4 @@ void DataReader::fixInstruments(Song &song) {
     }
 }
 
-
-
 } // DMF
