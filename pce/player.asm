@@ -911,7 +911,8 @@ update_psg:
             sta    psg_noise
 @l0:
     ; -- volume
-    bbr1   <player.al, @l1
+    tst    #%1000_0010, <player.al
+    beq    @l1
         rmb1    <player.al
         lda    <_volume
         beq    @skip
@@ -1107,6 +1108,7 @@ pattern_data_func:
     .dw @set_instrument
     .dw @note_on
     .dw @note_off
+    .dw @set_samples
 
 ;;---------------------------------------------------------------------
 @vibrato_mode:
@@ -1122,8 +1124,45 @@ pattern_data_func:
 @note_slide_up:
 @note_slide_down:
 @sync_signal:
+    lda    [player.ptr], Y
+    iny
+    rts
+
 @set_sample_bank:
     lda    [player.ptr], Y
+    iny
+    ; [todo] compute pointers
+    rts
+
+@set_samples:
+    ldx    <player.chn
+
+    lda    [player.ptr], Y
+    beq    @disable
+@enable:
+        stz    player.frequency.flag, X   ; deactivate frequency effects
+
+        lda    player.instrument.flag, X  ; only use instrument volume
+        and    #$01
+        sta    player.instrument.flag, X
+
+        lda    <player.chn_flag, X        ; only use volume and volume slide
+        and    #%0000_1010
+        ora    #%1000_0000
+        sta    <player.chn_flag, X
+
+        ; [todo] set dda on
+        ; [todo] compute hsync delay
+
+        iny
+        rts
+@disable:
+    lda    <player.chn_flag, X
+    and    #$7f
+    sta    <player.chn_flag, X
+    
+    ; [todo] check if the wave buffer needs to be reuploaded.
+    
     iny
     rts
 
@@ -1679,6 +1718,7 @@ pattern_data_func:
     iny
     
     lda    <player.chn_flag, X
+    bmi    @note_on.end                     ; skip if pcm replay is used
     ora    #%0000_0110
     sta    <player.chn_flag, X 
   

@@ -95,6 +95,8 @@ _vsync_cnt  .ds 1
     .bank 0
 	.org $E000
 
+    .include "task_manager.asm"
+
 ;----------------------------------------------------------------------
 ; IRQ 2
 ;----------------------------------------------------------------------
@@ -106,6 +108,8 @@ irq_2:
 ; HSync/VSync/VRAM DMA/etc...
 ;----------------------------------------------------------------------
 irq_1:
+    task.irq_install
+
     lda    video_reg             ; get VDC status register
     and    #%0010_0000
     beq    .no_vsync
@@ -186,10 +190,6 @@ irq_reset:
         cpy    #24
         bne    .l0
 
-    lda    #%11111111
-    sta    irq_disable
-    stz    irq_status
-
     ; clear bat
     st0    #$00
     st1    #$00
@@ -236,55 +236,19 @@ irq_reset:
     sta    <_si+1
     jsr    dmf_load_song
 
+    lda    #low(dmf_update)
+    sta    <_si
+    lda    #high(dmf_update)
+    sta    <_si+1
+    jsr    task.add
+
     cli
     
 .loop:
-;    stz    <_vsync_cnt
-;@wait_vsync:
-;    lda    <_vsync_cnt
-;    beq    @wait_vsync
-
-.wait_vsync:
-    lda    video_reg 
-    and    #%0010_0000
-    beq    .wait_vsync
-
-    st0    #$06
-    st1    #64
-    st2    #00
-
-.wait_hsync:
-    lda    video_reg 
-    and    #%0000_0100
-    beq    .wait_hsync
-
-    stz    color_reg
-    stz    color_reg+1
-    lda    #$07
-    sta    color_data
-    stz    color_data+1
-
-    jsr    dmf_update
-
-    stz    color_reg
-    stz    color_reg+1
-    lda    #$00 ;#$38
-    sta    color_data
-    stz    color_data+1
-
-    st0    #06
-    st1    #128
-    st2    #00
-@wait_2:
-    lda    $0000
-    and    #%0000_0100
-    beq    @wait_2
-
-    stz    color_reg
-    stz    color_reg+1
-    stz    color_data
-    stz    color_data+1
-    
+    stz    <_vsync_cnt
+@wait_vsync:
+    lda    <_vsync_cnt
+    beq    @wait_vsync
     bra    .loop
 
     .include "player.asm"
