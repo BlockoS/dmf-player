@@ -39,6 +39,18 @@ player.psg_ctrl                 .ds PSG_CHAN_COUNT
 player.delay                    .ds PSG_CHAN_COUNT 
 player.global_detune            .ds 1
 
+player.samples.rate.lo       .ds 2
+player.samples.rate.hi       .ds 2
+player.samples.offset.lo     .ds 2
+player.samples.offset.hi     .ds 2
+player.samples.bank          .ds 2
+
+player.rcr           .ds 1
+player.pcm.rcr       .ds PSG_CHAN_COUNT*2
+player.pcm.rcr.delta .ds PSG_CHAN_COUNT*2
+player.pcm.bank      .ds PSG_CHAN_COUNT
+player.pcm.ptr       .ds PSG_CHAN_COUNT*2
+
 _note   .ds 1
 _volume .ds 1
 _freq   .ds 2
@@ -96,6 +108,8 @@ player.instrument.wave.lo    .ds PSG_CHAN_COUNT
 player.instrument.wave.hi    .ds PSG_CHAN_COUNT
 player.instrument.wave.index .ds PSG_CHAN_COUNT
 
+player.samples.count         .ds 1
+
 player.wave.id    .ds PSG_CHAN_COUNT
 
 ;;---------------------------------------------------------------------
@@ -133,6 +147,78 @@ Rest               = $40 ; For values between 0 and 63
 ;;---------------------------------------------------------------------
 
     .code
+
+;;;
+   .macro dmf_pcm_start
+    stz    <player.rcr
+    ; [todo]
+   .endm
+
+    .macro dmf_pcm_update.ch
+@pcm.ch\1:
+    cpx    <player.pcm.rcr+(1+2*\1)
+    bne    @pcm.ch\1.end
+        lda    <player.pcm.bank+\1
+        tam    #DMF_DATA_MPR
+
+        lda    #\1
+        sta    psg_ch
+        
+        lda    [player.pcm.ptr+(2*\1)]
+        cmp    #$ff
+        bne    @pcm.ch\1.update
+            sta    <player.pcm.rcr+(1+2*\1)
+            bra    @pcm.ch\1.end
+@pcm.ch\1.update:
+        sta    psg_wavebuf
+
+        inc    <player.pcm.ptr+(2*\1)
+        bne    @l\1
+            inc    <player.pcm.ptr+(1+2*\1)
+            lda    <player.pcm.ptr+(1+2*\1)
+            and    #%111_00000
+            cmp    #(DMF_DATA_MPR << 5)
+            bcc    @l\1
+            beq    @l\1
+                lda    <player.pcm.ptr+(1+2*\1)
+                and    #$1f
+                ora    #(DMF_DATA_MPR << 5)
+                sta    <player.pcm.ptr+(1+2*\1)
+                inc    <player.pcm.bank+\1
+@l\1:
+        lda    <player.pcm.rcr+(2*\1)
+        clc
+        adc    <player.pcm.rcr.delta+(2*\1)
+        sta    <player.pcm.rcr+(2*\1)
+        lda    <player.pcm.rcr+(1+2*\1)
+        adc    <player.pcm.rcr.delta+(1+2*\1)
+        sta    <player.pcm.rcr+(1+2*\1)
+@pcm.ch\1.end:
+    .endm
+
+
+    ; [todo] ramcode
+dmf_pcm_update:
+    tma    #DMF_DATA_MPR
+    pha
+    
+    ldx    <player.rcr
+
+    dmf_pcm_update.ch 0
+    dmf_pcm_update.ch 1
+    dmf_pcm_update.ch 2
+    dmf_pcm_update.ch 3
+    dmf_pcm_update.ch 4
+    dmf_pcm_update.ch 5
+
+    inc    <player.rcr
+    
+    pla
+    tam    #DMF_DATA_MPR
+
+    lda    player.chn
+    sta    psg_ch
+    rts
 
 ;;
 ;; Function: dmf_init
@@ -246,6 +332,59 @@ dmf_load_song.ex:
     cla
     adc    <_song.name+1
     sta    <_song.author+1
+
+    lda    [<_song.author]
+    inc    A
+    clc
+    adc    <_song.author
+    sta    <_si
+    lda    <_song.author+1
+    adc    #$00
+    sta    <_si+1
+
+    lda    [_si]
+    sta    player.samples.count
+
+    clc
+    lda    <_si
+    adc    #$01
+    sta    <player.samples.rate.lo
+    tax
+    lda    <_si+1
+    adc    #$00
+    sta    <player.samples.rate.lo+1
+
+    clc
+    sax
+    adc    player.samples.count
+    sta    <player.samples.offset.lo
+    sax
+    adc    #$00
+    sta    <player.samples.offset.lo+1
+
+    clc
+    sax
+    adc    player.samples.count
+    sta    <player.samples.rate.hi
+    sax
+    adc    #$00
+    sta    <player.samples.rate.hi+1
+
+    clc
+    sax
+    adc    player.samples.count
+    sta    <player.samples.offset.hi
+    sax
+    adc    #$00
+    sta    <player.samples.offset.hi+1
+
+    clc
+    sax
+    adc    player.samples.count
+    sta    player.samples.bank
+    sax
+    adc    #$00
+    sta    player.samples.bank+1
 
     stz    player.matrix_pos
     jsr    update_matrix
@@ -914,12 +1053,18 @@ update_psg:
     tst    #%1000_0010, <player.al
     beq    @l1
         rmb1    <player.al
+        
+        lda    <player.psg_ctrl, X
+        and    #%11_0_00000
+        sta    <player.psg_ctrl, X
+
         lda    <_volume
         beq    @skip
             lsr    A
             lsr    A
             ora    #%10_0_00000
 @skip:
+        ora    <player.psg_ctrl, X
         sta    <player.psg_ctrl, X
         sta    psg_ctrl
 @l1:
@@ -1151,8 +1296,49 @@ pattern_data_func:
         ora    #%1000_0000
         sta    <player.chn_flag, X
 
-        ; [todo] set dda on
-        ; [todo] compute hsync delay
+        ; enable dda
+        ; [todo] volume
+        lda    #$ff
+        sta    player.volume, X
+;        lsr    A
+;        lsr    A
+;        ora    #PSG_CTRL_DDA_ON
+        lda    #(PSG_CTRL_DDA_ON | PSG_CTRL_FULL_VOLUME)    
+        sta    <player.psg_ctrl, X
+        
+        lda    player.note, X
+        cmp    #$0C
+        bcc    @skip
+@modulo_12:
+            sec
+            sbc    #$0c
+            cmp    #$0c
+            bcs    @modulo_12
+@skip:
+
+        phy
+        tay
+
+        lda    [player.samples.bank], Y
+        sta    <player.pcm.bank, X
+
+        txa
+        asl    A
+        tax
+
+        stz    <player.pcm.rcr, X
+        stz    <player.pcm.rcr+1, X
+
+        lda    [player.samples.rate.lo], Y
+        sta    <player.pcm.rcr.delta, X
+        lda    [player.samples.rate.hi], Y
+        sta    <player.pcm.rcr.delta+1, X
+        lda    [player.samples.offset.lo], Y
+        sta    <player.pcm.ptr, X
+        lda    [player.samples.offset.hi], Y
+        sta    <player.pcm.ptr+1, X
+        
+        ply
 
         iny
         rts
@@ -1161,6 +1347,12 @@ pattern_data_func:
     and    #$7f
     sta    <player.chn_flag, X
     
+    txa
+    asl    A
+    tax
+    lda    #$ff
+    sta    <player.pcm.rcr, X
+        
     ; [todo] check if the wave buffer needs to be reuploaded.
     
     iny
@@ -1718,7 +1910,7 @@ pattern_data_func:
     iny
     
     lda    <player.chn_flag, X
-    bmi    @note_on.end                     ; skip if pcm replay is used
+    bmi    @note_on.end                     ; skip if pcm replay is used [todo] reset pcm replay
     ora    #%0000_0110
     sta    <player.chn_flag, X 
   

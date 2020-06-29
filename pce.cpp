@@ -72,6 +72,8 @@ static Effect DMF2PCE(DMF::Effect fx) {
             return SetLFOMode;
         case DMF::SET_LFO_SPEED:
             return SetLFOSpeed;
+        case DMF::SET_SAMPLES:
+            return SetSamples;
         default:
             return Rest;
     }
@@ -282,6 +284,7 @@ void SongPacker::packSamples(DMF::Song const& song) {
             v = (v < 0.0) ? 0.0 : ((v > 1.0) ? 1.0 : v);
             _samples[i].data.push_back(v * 31);
         }
+        _samples[i].data.push_back(0xff);
     }
 }
 

@@ -67,15 +67,13 @@ bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
                      "%s.pointers:\n"
                      "    .dw %s.wave\n"
                      "    .dw %s.instruments\n"
-                     "    .dw %s.matrix\n"
-                     "    .dw %s.samples\n",
+                     "    .dw %s.matrix\n",
                      _prefix.c_str(),
                      _prefix.c_str(), infos.timeBase,
                      _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
                      _prefix.c_str(), infos.totalRowsPerPattern,
                      _prefix.c_str(), infos.totalRowsInPatternMatrix,
                      _prefix.c_str(), (uint8_t)instrument_count,
-                     _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),
                      _prefix.c_str(),
@@ -354,14 +352,6 @@ bool Writer::writeSamplesInfos(std::vector<Sample> const& samples, size_t elemen
     fprintf(_output, "%s.samples:\n", _prefix.c_str());    
     fprintf(_output, "%s.samples.count:\n    .db $%02x\n", _prefix.c_str(), static_cast<uint32_t>(count));    
     for(int p=0; p<2; p++) {
-        fprintf(_output, "%s.samples.size.%s:\n", _prefix.c_str(), postfix[p]);
-        for(size_t i=0; i<count;) {
-            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
-            fprintf(_output, "    .%s ", op[p]);
-            for(size_t j=0; j<last; j++, i++) {
-                fprintf(_output, "$%04x%c", static_cast<uint32_t>(samples[i].data.size()), (j<(last-1))?',':'\n');
-            }
-        }
         fprintf(_output, "%s.samples.rate.%s:\n", _prefix.c_str(), postfix[p]);
         for(size_t i=0; i<count;) {
             size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
@@ -388,9 +378,6 @@ bool Writer::writeSamplesInfos(std::vector<Sample> const& samples, size_t elemen
         }
     }
 
-/*
-    write sample bank
-*/
     return ret;
 }
 
@@ -405,12 +392,17 @@ bool Writer::writeSamples(std::vector<Sample> const& samples) {
             size_t count = ((start+16) > end) ? (end-start) : 16;
             size_t next = _output_bytes + count;
             if(next >= 8192) {
+                count = 8192 - _output_bytes;
+            }
+            ret = writeBytes(samples[j].data.data()+start, count, 16);
+            if(next >= 8192) {
                 fprintf(_output, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_DATA_MPR << 13)\n", _bank);
                 _bank++;
                 _output_bytes = 0;
             }
-            ret = writeBytes(samples[j].data.data()+start, count, 16);
-            _output_bytes += count;
+            else {
+                _output_bytes += count;
+            }
             start += count;
         }
     }

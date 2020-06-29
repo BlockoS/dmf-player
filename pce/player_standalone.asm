@@ -70,6 +70,7 @@ PSG_VOLUME_MAX = $1f ; Maximum volume value
 _bl         .ds 1
 _si         .ds 2
 _vdc_reg    .ds 1
+_vdc_status .ds 1
 _vdc_ctrl   .ds 1
 _vsync_cnt  .ds 1
 
@@ -96,6 +97,8 @@ _vsync_cnt  .ds 1
 	.org $E000
 
     .include "task_manager.asm"
+    .include "player.asm"
+    .include "frequency.inc"
 
 ;----------------------------------------------------------------------
 ; IRQ 2
@@ -108,13 +111,49 @@ irq_2:
 ; HSync/VSync/VRAM DMA/etc...
 ;----------------------------------------------------------------------
 irq_1:
-    task.irq_install
-
     lda    video_reg             ; get VDC status register
-    and    #%0010_0000
-    beq    .no_vsync
-	    inc    <_vsync_cnt	
-.no_vsync:
+    sta    <_vdc_status
+
+    bbr2   <_vdc_status, @check_vsync
+@hsync:
+        jsr    dmf_pcm_update
+
+        st0    #$06
+        lda    <player.rcr
+        clc
+        adc    #$40
+        sta    video_data_l
+        cla
+        adc    #$00
+        sta    video_data_h
+        
+        bra    @end
+@check_vsync:
+    bbr5   <_vdc_status, @end
+@vsync:
+    ; [todo] grab P
+    task.irq_install
+    dmf_pcm_start
+
+    stz   <player.pcm.rcr
+    stz   <player.pcm.rcr+1
+    stz   <player.pcm.rcr+2
+    stz   <player.pcm.rcr+3
+    stz   <player.pcm.rcr+4
+    stz   <player.pcm.rcr+5
+    stz   <player.pcm.rcr+6
+    stz   <player.pcm.rcr+7
+    stz   <player.pcm.rcr+8
+    stz   <player.pcm.rcr+9
+    stz   <player.pcm.rcr+10
+    stz   <player.pcm.rcr+11
+
+    st0    #$06
+    st1    #$40
+    st2    #$00
+
+    inc    <_vsync_cnt	
+@end:
     stz    video_reg
     rti
 
@@ -250,9 +289,6 @@ irq_reset:
     lda    <_vsync_cnt
     beq    @wait_vsync
     bra    .loop
-
-    .include "player.asm"
-    .include "frequency.inc"
 
 DMF_DATA_ROM_BANK = 1
 ; [todo::begin] dummy song
