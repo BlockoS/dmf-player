@@ -156,6 +156,8 @@ Rest               = $40 ; For values between 0 and 63
 
     .macro dmf_pcm_update.ch
 @pcm.ch\1:
+    bbr7   <player.chn_flag+\1, @pcm.ch\1.end
+
     cpx    <player.pcm.rcr+(1+2*\1)
     bne    @pcm.ch\1.end
         lda    <player.pcm.bank+\1
@@ -740,6 +742,11 @@ update_psg:
     stx    <player.chn
     stx    psg_ch
     lda    <player.chn_flag, X
+    bpl    @no.pcm
+        lda    <player.psg_ctrl, X
+        sta    psg_ctrl
+        rts
+@no.pcm:
     sta    <player.al
 
     lda    player.note, X
@@ -1050,8 +1057,7 @@ update_psg:
             sta    psg_noise
 @l0:
     ; -- volume
-    tst    #%1000_0010, <player.al
-    beq    @l1
+    bbr1   <player.al, @l1
         rmb1    <player.al
         
         lda    <player.psg_ctrl, X
@@ -1283,8 +1289,8 @@ pattern_data_func:
     ldx    <player.chn
 
     lda    [player.ptr], Y
-    beq    @disable
-@enable:
+    beq    @pcm.disable
+@pcm.enable:
         stz    player.frequency.flag, X   ; deactivate frequency effects
 
         lda    player.instrument.flag, X  ; only use instrument volume
@@ -1308,13 +1314,13 @@ pattern_data_func:
         
         lda    player.note, X
         cmp    #$0C
-        bcc    @skip
+        bcc    @pcm.skip
 @modulo_12:
             sec
             sbc    #$0c
             cmp    #$0c
             bcs    @modulo_12
-@skip:
+@pcm.skip:
 
         phy
         tay
@@ -1342,7 +1348,7 @@ pattern_data_func:
 
         iny
         rts
-@disable:
+@pcm.disable:
     lda    <player.chn_flag, X
     and    #$7f
     sta    <player.chn_flag, X
@@ -1910,7 +1916,7 @@ pattern_data_func:
     iny
     
     lda    <player.chn_flag, X
-    bmi    @note_on.end                     ; skip if pcm replay is used [todo] reset pcm replay
+    bmi    @pcm.reset
     ora    #%0000_0110
     sta    <player.chn_flag, X 
   
@@ -1923,6 +1929,16 @@ pattern_data_func:
     stz    player.instrument.vol.index, X
     stz    player.instrument.arp.index, X
     rts
+@pcm.reset:
+    stz    player.instrument.vol.index, X
+    stz    player.instrument.arp.index, X
+    
+    stz    <player.pcm.rcr, X
+    stz    <player.pcm.rcr+1, X
+    
+    dey
+    jmp    @pcm.enable
+
 ;;
 ;; Function: @pattern_break
 ;;
