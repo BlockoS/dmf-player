@@ -116,16 +116,16 @@ irq_1:
 
     bbr2   <_vdc_status, @check_vsync
 @hsync:
-        jsr    dmf_pcm_update
+;        jsr    dmf_pcm_update
 
-        st0    #$06
-        lda    <player.rcr
-        clc
-        adc    #$40
-        sta    video_data_l
-        cla
-        adc    #$00
-        sta    video_data_h
+;        st0    #$06
+;        lda    <player.rcr
+;        clc
+;        adc    #$40
+;        sta    video_data_l
+;        cla
+;        adc    #$00
+;        sta    video_data_h
         
         bra    @end
 @check_vsync:
@@ -133,20 +133,6 @@ irq_1:
 @vsync:
     ; [todo] grab P
     task.irq_install
-    dmf_pcm_start
-
-    stz   <player.pcm.rcr
-    stz   <player.pcm.rcr+1
-    stz   <player.pcm.rcr+2
-    stz   <player.pcm.rcr+3
-    stz   <player.pcm.rcr+4
-    stz   <player.pcm.rcr+5
-    stz   <player.pcm.rcr+6
-    stz   <player.pcm.rcr+7
-    stz   <player.pcm.rcr+8
-    stz   <player.pcm.rcr+9
-    stz   <player.pcm.rcr+10
-    stz   <player.pcm.rcr+11
 
     st0    #$06
     st1    #$40
@@ -268,11 +254,11 @@ irq_reset:
     jsr    dmf_init
 
     lda    #bank(song)              ; Change this if the song label changes (and it will most likely).
-    sta    <_bl
+    sta    dmf.song.bank
     lda    #low(song)
-    sta    <_si
+    sta    dmf.song.ptr
     lda    #high(song)
-    sta    <_si+1
+    sta    dmf.song.ptr+1
     jsr    dmf_load_song
 
     lda    #low(dmf_update)
