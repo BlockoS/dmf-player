@@ -261,6 +261,13 @@ irq_reset:
     sta    dmf.song.ptr+1
     jsr    dmf_load_song
 
+
+    lda    #low(dmf_commit)
+    sta    <_si
+    lda    #high(dmf_commit)
+    sta    <_si+1
+    jsr    task.add
+
     lda    #low(dmf_update)
     sta    <_si
     lda    #high(dmf_update)

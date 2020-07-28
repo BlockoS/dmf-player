@@ -3,6 +3,13 @@
 ; See the accompanying LICENSE file for terms.
 ;;------------------------------------------------------------------------------------------
 
+; [todo]
+;    fx callback : don't set psg reg
+;    fx callback : bring back code
+;    commit psg reg / upload wav / start pcm in irq1
+
+;;------------------------------------------------------------------------------------------
+
 ;;
 ;; Title: DMF player.
 ;;
@@ -55,43 +62,42 @@ dmf.zp.begin:
 mul8.lo .ds 4
 mul8.hi .ds 4
 
-                                                        ; [todo] player => dmf.player
+dmf.player.si .ds 2
+dmf.player.ax:
+dmf.player.al .ds 1
+dmf.player.ah .ds 1
 
-player.si .ds 2
-player.ax:
-player.al .ds 1
-player.ah .ds 1
+dmf.player.ptr .ds 2
 
-player.ptr .ds 2
+dmf.player.psg.main    .ds 1
+dmf.player.psg.ctrl    .ds DMF_CHAN_COUNT 
+dmf.player.psg.freq.lo .ds DMF_CHAN_COUNT
+dmf.player.psg.freq.hi .ds DMF_CHAN_COUNT
+dmf.player.psg.pan     .ds DMF_CHAN_COUNT
 
-player.psg.main    .ds 1
-player.psg.ctrl    .ds DMF_CHAN_COUNT 
-player.psg.freq.lo .ds DMF_CHAN_COUNT
-player.psg.freq.hi .ds DMF_CHAN_COUNT
-player.psg.pan     .ds DMF_CHAN_COUNT
-
-player.flag   .ds 1
-player.note   .ds DMF_CHAN_COUNT
-player.volume .ds DMF_CHAN_COUNT
-player.rest   .ds DMF_CHAN_COUNT
+dmf.player.flag   .ds 1
+dmf.player.note   .ds DMF_CHAN_COUNT
+dmf.player.volume .ds DMF_CHAN_COUNT
+dmf.player.rest   .ds DMF_CHAN_COUNT
 
 ; [todo] arpeggio, vibrato, etc...
 ; [todo] instrument states (volume, arpeggio, wave)
 
-                                ; 0: backup of header mpr
-player.mpr_backup .ds 2         ; 1: backup of data mpr
-player.chn .ds 1                ; current psg channel
+                                    ; 0: backup of header mpr
+dmf.player.mpr_backup .ds 2         ; 1: backup of data mpr
+dmf.player.chn .ds 1                ; current psg channel
+dmf.player.chn.flag .ds DMF_CHAN_COUNT
 
-player.matrix.row .ds 1         ; current matrix row
-player.tick .ds 2               ; current time tick (fine/coarse kinda sort off)
+dmf.player.matrix.row .ds 1         ; current matrix row
+dmf.player.tick .ds 2               ; current time tick (fine/coarse kinda sort off)
 
-player.pattern.pos  .ds 1       ; current pattern position
+dmf.player.pattern.pos  .ds 1       ; current pattern position
 
-player.samples.rate.lo       .ds 2 ; PCM sample rate (RCR offset LSB) 
-player.samples.rate.hi       .ds 2 ; PCM sample rate (RCR offset MSB)
-player.samples.offset.lo     .ds 2 ; PCM samples ROM offset (LSB)
-player.samples.offset.hi     .ds 2 ; PCM samples ROM offset (MSB)
-player.samples.bank          .ds 2 ; PCM samples ROM bank
+dmf.player.samples.rate.lo       .ds 2 ; PCM sample rate (RCR offset LSB) 
+dmf.player.samples.rate.hi       .ds 2 ; PCM sample rate (RCR offset MSB)
+dmf.player.samples.offset.lo     .ds 2 ; PCM samples ROM offset (LSB)
+dmf.player.samples.offset.hi     .ds 2 ; PCM samples ROM offset (MSB)
+dmf.player.samples.bank          .ds 2 ; PCM samples ROM bank
 
 dmf.zp.end:
 
@@ -113,9 +119,11 @@ dmf.song.wave              .ds 2
 dmf.song.instruments       .ds 2
 dmf.song.matrix            .ds 2
 
-player.pattern.bank .ds DMF_CHAN_COUNT
-player.pattern.lo   .ds DMF_CHAN_COUNT
-player.pattern.hi   .ds DMF_CHAN_COUNT
+dmf.player.pattern.bank .ds DMF_CHAN_COUNT
+dmf.player.pattern.lo   .ds DMF_CHAN_COUNT
+dmf.player.pattern.hi   .ds DMF_CHAN_COUNT
+
+dmf.player.wave.id .ds DMF_CHAN_COUNT
 
 dmf.bss.end:
 
@@ -164,6 +172,133 @@ mul8:
     rts
 
 ;;
+dmf_commit:
+    stz    psg_ch                                 ; update PSG control register
+    lda    <dmf.player.psg.ctrl+0
+    sta    psg_ctrl
+
+    inc    psg_ch
+    lda    <dmf.player.psg.ctrl+1
+    sta    psg_ctrl
+
+    inc    psg_ch
+    lda    <dmf.player.psg.ctrl+2
+    sta    psg_ctrl
+
+    inc    psg_ch
+    lda    <dmf.player.psg.ctrl+3
+    sta    psg_ctrl
+
+    inc    psg_ch
+    lda    <dmf.player.psg.ctrl+4
+    sta    psg_ctrl
+
+    inc    psg_ch
+    lda    <dmf.player.psg.ctrl+5
+    sta    psg_ctrl
+
+  .macro dmf.update_psg
+@ch\1:    
+    bbr7   <dmf.player.chn.flag+\1, @wav\1
+        ; [todo] pcm
+@wav\1:
+    bbr6   <dmf.player.chn.flag+\1, @pan\1
+        lda    dmf.player.wave.id+\1
+        jsr    @load_wav
+@pan\1:
+    bbr5   <dmf.player.chn.flag+\1, @freq\1
+        lda    <dmf.player.psg.pan+\1
+        sta    psg_pan
+@freq\1:
+    bbr4   <dmf.player.chn.flag+\1, @next\1
+        lda    <dmf.player.psg.freq.lo+\1
+        sta    psg_freq.lo
+        lda    <dmf.player.psg.freq.hi+\1
+        sta    psg_freq.hi
+@next\1:
+  .endm
+
+    stz    psg_ch
+    dmf.update_psg 0
+    inc    psg_ch
+    dmf.update_psg 1
+    inc    psg_ch
+    dmf.update_psg 2
+    inc    psg_ch
+    dmf.update_psg 3
+    inc    psg_ch
+    dmf.update_psg 4
+    bbr0   <dmf.player.chn.flag+4, @no_noise0
+        cla
+        ldy    <dmf.player.note+4
+        bpl    @set_noise0
+            lda    noise_table, Y 
+@set_noise0:
+        sta    psg_noise
+@no_noise0:
+    inc    psg_ch
+    dmf.update_psg 5
+    bbr0   <dmf.player.chn.flag+5, @no_noise1
+        cla
+        ldy    <dmf.player.note+5
+        bpl    @set_noise1
+            lda    noise_table, Y
+@set_noise1:
+        sta    psg_noise
+@no_noise1:
+
+    stz    <dmf.player.chn.flag+0
+    stz    <dmf.player.chn.flag+1
+    stz    <dmf.player.chn.flag+2
+    stz    <dmf.player.chn.flag+3
+    stz    <dmf.player.chn.flag+4
+    stz    <dmf.player.chn.flag+5
+
+    rts
+
+@load_wav:
+    stz    <dmf.player.si
+
+    lsr    A
+    ror    <dmf.player.si
+
+    lsr    A
+    ror    <dmf.player.si
+
+    lsr    A
+    ror    <dmf.player.si
+
+    sax
+
+    lda    dmf.song.wave
+    clc
+    adc    <dmf.player.si
+    sta    <dmf.player.si
+
+    sax
+    adc    dmf.song.wave+1
+    sta    <dmf.player.si+1
+
+;;
+;; Function: dmf_wave_upload
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+dmf_wave_upload:
+    stz    psg_ctrl
+    cly
+@l0:                                ; [todo] unroll?
+    lda    [dmf.player.si], Y
+    iny
+    sta    psg_wavebuf
+    cpy    #$20
+    bne    @l0
+    
+    rts
+
+;;
 ;; Function: dmf_load_song
 ;; Initialize player and load song.
 ;;
@@ -183,12 +318,12 @@ dmf_load_song:
     tam    #DMF_HEADER_MPR
 
     lda    dmf.song.ptr
-    sta    <player.si
+    sta    <dmf.player.si
 
     lda    dmf.song.ptr+1
     and    #$1f
     ora    #DMF_HEADER_MPR<<5
-    sta    <player.si+1
+    sta    <dmf.player.si+1
 
     bsr    @load_song
 
@@ -213,7 +348,7 @@ dmf_load_song:
     ; read song header
     cly
 @copy_header:
-    lda    [player.si], Y
+    lda    [dmf.player.si], Y
     sta    dmf.song.infos, Y
     iny
     cpy    #DMF_HEADER_SIZE
@@ -222,95 +357,97 @@ dmf_load_song:
     ; save address to song name
     tya
     clc
-    adc    <player.si
-    sta    <player.si
+    adc    <dmf.player.si
+    sta    <dmf.player.si
     sta    dmf.song.name
     cla
-    adc    <player.si+1
-    sta    <player.si
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si
     sta    dmf.song.name+1
 
     ; move to the song author
-    lda    [player.si]          ; string length
+    lda    [dmf.player.si]          ; string length
     inc    A
     clc
-    adc    <player.si
+    adc    <dmf.player.si
     sta    dmf.song.author
     cla
-    adc    <player.si+1
+    adc    <dmf.player.si+1
     sta    dmf.song.author+1
 
     ; move to samples
-    lda    [player.si]          ; string length
+    lda    [dmf.player.si]          ; string length
     inc    A
     clc
-    adc    <player.si
-    sta    <player.si
+    adc    <dmf.player.si
+    sta    <dmf.player.si
     cla
-    adc    <player.si+1
-    sta    <player.si+1
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
 
-    lda    [player.si]          ; sample count
-    sta    <player.al
+    lda    [dmf.player.si]          ; sample count
+    sta    <dmf.player.al
 
-    clc                         ; save pointer to sample rates (LSB)
-    lda    <player.si
+    clc                             ; save pointer to sample rates (LSB)
+    lda    <dmf.player.si
     adc    #$01
-    sta    <player.samples.rate.lo
+    sta    <dmf.player.samples.rate.lo
     tax
-    lda    player.si+1
+    lda    dmf.player.si+1
     adc    #$00
-    sta    <player.samples.rate.lo+1
+    sta    <dmf.player.samples.rate.lo+1
 
-    clc                         ; samples ROM offset (LSB)
+    clc                             ; samples ROM offset (LSB)
     sax
-    adc    <player.al
-    sta    <player.samples.offset.lo
+    adc    <dmf.player.al
+    sta    <dmf.player.samples.offset.lo
     sax
     adc    #$00
-    sta    <player.samples.offset.lo+1
+    sta    <dmf.player.samples.offset.lo+1
 
-    clc                         ; sample rate (MSB)
+    clc                             ; sample rate (MSB)
     sax
-    adc    <player.al
-    sta    <player.samples.rate.hi
+    adc    <dmf.player.al
+    sta    <dmf.player.samples.rate.hi
     sax
     adc    #$00
-    sta    <player.samples.rate.hi+1
+    sta    <dmf.player.samples.rate.hi+1
 
-    clc                         ; samples ROM offset (MSB)
+    clc                             ; samples ROM offset (MSB)
     sax
-    adc    <player.al
-    sta    <player.samples.offset.hi
+    adc    <dmf.player.al
+    sta    <dmf.player.samples.offset.hi
     sax
     adc    #$00
-    sta    <player.samples.offset.hi+1
+    sta    <dmf.player.samples.offset.hi+1
 
-    clc                         ; samples ROM bank
+    clc                             ; samples ROM bank
     sax
-    adc    <player.al
-    sta    <player.samples.bank
+    adc    <dmf.player.al
+    sta    <dmf.player.samples.bank
     sax
     adc    #$00
-    sta    <player.samples.bank+1
+    sta    <dmf.player.samples.bank+1
 
     ; initializes player
-    stz    player.matrix.row
+    stz    dmf.player.matrix.row
     jsr    dmf_update_matrix
 
     lda    #$ff
-    sta    <player.psg.main
+    sta    <dmf.player.psg.main
 
     clx
 @player_init:
-    stz    <player.psg.ctrl, X
-    stz    <player.psg.freq.lo, X
-    stz    <player.psg.freq.hi, X
+    stz    <dmf.player.psg.ctrl, X
+    stz    <dmf.player.psg.freq.lo, X
+    stz    <dmf.player.psg.freq.hi, X
 
     lda    #$ff
-    sta    <player.psg.pan, X
+    sta    <dmf.player.psg.pan, X
     
     ; [todo] default player sate
+    ; [todo] reset dmf.player.chn.flag
+
     inx
     cpx    #DMF_CHAN_COUNT
     bne    @player_init
@@ -325,56 +462,56 @@ dmf_load_song:
 ;; Return:
 ;;
 dmf_update_matrix:
-    lda    <player.matrix.row
+    lda    <dmf.player.matrix.row
     cmp    dmf.song.matrix.rows
     bne    @l0
-        stz    <player.matrix.row
+        stz    <dmf.player.matrix.row
 @l0:
 
     lda    dmf.song.matrix
-    sta    <player.si    
+    sta    <dmf.player.si    
     lda    dmf.song.matrix+1
-    sta    <player.si+1
+    sta    <dmf.player.si+1
     
-    stz    <player.pattern.pos
+    stz    <dmf.player.pattern.pos
 
-    ldy    <player.matrix.row
+    ldy    <dmf.player.matrix.row
     clx
 @set_pattern_ptr:
-        lda    [player.si], Y
-        sta    player.pattern.bank, X       ; pattern ROM bank
+        lda    [dmf.player.si], Y
+        sta    dmf.player.pattern.bank, X       ; pattern ROM bank
 
         clc
-        lda    <player.si
+        lda    <dmf.player.si
         adc    dmf.song.matrix.rows
-        sta    <player.si
-        lda    <player.si+1
+        sta    <dmf.player.si
+        lda    <dmf.player.si+1
         adc    #$00
-        sta    <player.si+1
+        sta    <dmf.player.si+1
 
-        lda    [player.si], Y
-        sta    player.pattern.lo, X         ; pattern ROM offset (LSB)
+        lda    [dmf.player.si], Y
+        sta    dmf.player.pattern.lo, X         ; pattern ROM offset (LSB)
 
         clc
-        lda    <player.si
+        lda    <dmf.player.si
         adc    dmf.song.matrix.rows
-        sta    <player.si
-        lda    <player.si+1
+        sta    <dmf.player.si
+        lda    <dmf.player.si+1
         adc    #$00
-        sta    <player.si+1
+        sta    <dmf.player.si+1
 
-        lda    [player.si], Y
-        sta    player.pattern.hi, X         ; pattern ROM offset (MSB)
+        lda    [dmf.player.si], Y
+        sta    dmf.player.pattern.hi, X         ; pattern ROM offset (MSB)
 
-        lda    <player.si
+        lda    <dmf.player.si
         clc
         adc    dmf.song.matrix.rows
-        sta    <player.si
-        lda    <player.si+1
+        sta    <dmf.player.si
+        lda    <dmf.player.si+1
         adc    #$00
-        sta    <player.si+1
+        sta    <dmf.player.si+1
 
-        stz    <player.rest, X
+        stz    <dmf.player.rest, X
 
 ; [todo] reset player state
 
@@ -383,10 +520,10 @@ dmf_update_matrix:
         bne    @set_pattern_ptr
 
     lda    #1
-    sta    <player.tick
-    sta    <player.tick+1
+    sta    <dmf.player.tick
+    sta    <dmf.player.tick+1
 
-    inc    <player.matrix.row
+    inc    <dmf.player.matrix.row
 
     rts
 
@@ -421,9 +558,9 @@ dmf_update:
 ;; Return:
 ;;
 update_song:                                        ; [todo] rename
-    stz   <player.flag
+    stz    <dmf.player.flag
     
-    dec    <player.tick
+    dec    <dmf.player.tick
     beq    @l0
     bmi    @l0
         ; Nothing to do here.
@@ -432,36 +569,36 @@ update_song:                                        ; [todo] rename
 @l0:
     ; Reset base tick.
     lda    dmf.song.time.base
-    sta    <player.tick
+    sta    <dmf.player.tick
     
-    dec    <player.tick+1
+    dec    <dmf.player.tick+1
     beq    @l1
     bmi    @l1
         ; Nothing to do here.
         rts
 @l1:
     ; Fetch next pattern entry.
-    inc    <player.pattern.pos
+    inc    <dmf.player.pattern.pos
    
     ; 1. reset coarse timer tick.
-    lda    <player.pattern.pos
+    lda    <dmf.player.pattern.pos
     and    #$01
     tax
     lda    dmf.song.time.tick, X
-    sta    <player.tick+1
+    sta    <dmf.player.tick+1
 
     clx
 @loop:
-    stx    <player.chn
+    stx    <dmf.player.chn
     bsr    update_chan                              ; [todo] name
     bcc    @l2
-        smb0    <player.flag
+        smb0    <dmf.player.flag
 @l2:
     inx
     cpx    #DMF_CHAN_COUNT
     bne    @loop
 
-    bbs0   <player.flag, @l3
+    bbs0   <dmf.player.flag, @l3
         rts
 @l3:
     jsr   dmf_update_matrix
@@ -475,27 +612,27 @@ update_song:                                        ; [todo] rename
 ;; Return:
 ;;
 update_chan:                                        ; [todo] name
-    ldx    <player.chn
-    lda    <player.rest, X
+    ldx    <dmf.player.chn
+    lda    <dmf.player.rest, X
     bne    @dec_rest
-        lda    player.pattern.bank, X
+        lda    dmf.player.pattern.bank, X
         tam    #DMF_DATA_MPR
-        lda    player.pattern.lo, X
-        sta    <player.ptr
-        lda    player.pattern.hi, X 
-        sta    <player.ptr+1
+        lda    dmf.player.pattern.lo, X
+        sta    <dmf.player.ptr
+        lda    dmf.player.pattern.hi, X 
+        sta    <dmf.player.ptr+1
         bsr    fetch_pattern                        ; [todo] name
         bcc    @continue
             rts
 @continue:
-        ldx    <player.chn
-        lda    <player.ptr
-        sta    player.pattern.lo, X
-        lda    <player.ptr+1
-        sta    player.pattern.hi, X 
+        ldx    <dmf.player.chn
+        lda    <dmf.player.ptr
+        sta    dmf.player.pattern.lo, X
+        lda    <dmf.player.ptr+1
+        sta    dmf.player.pattern.hi, X 
         rts
 @dec_rest:
-    dec    <player.rest, X
+    dec    <dmf.player.rest, X
 @end:
     clc
     rts
@@ -510,7 +647,7 @@ update_chan:                                        ; [todo] name
 fetch_pattern:                                      ; [todo] name
     cly
 @loop:    
-    lda   [player.ptr], Y
+    lda   [dmf.player.ptr], Y
     iny
 
     cmp   #$ff                      ; [todo] magic value
@@ -527,30 +664,30 @@ fetch_pattern:                                      ; [todo] name
         and    #$3f                 ; [todo] magic value
         bra    @rest_store
 @rest_ex:
-        lda    [player.ptr], Y
+        lda    [dmf.player.ptr], Y
         iny
 @rest_store:
-        ldx    <player.chn
+        ldx    <dmf.player.chn
         dec    a
-        sta    <player.rest, X
+        sta    <dmf.player.rest, X
         pla
         bra    @inc_ptr
 @fetch
     asl   A
     tax
 
-    bsr   @fetch_pattern_data                ; [todo] make it local (if it's supported)
+    bsr   @fetch_pattern_data
 
     pla 
     bpl    @loop
 @inc_ptr:
     tya
     clc
-    adc    <player.ptr
-    sta    <player.ptr
+    adc    <dmf.player.ptr
+    sta    <dmf.player.ptr
     cla
-    adc    <player.ptr+1
-    sta    <player.ptr+1
+    adc    <dmf.player.ptr+1
+    sta    <dmf.player.ptr+1
     
     clc
     rts
@@ -613,8 +750,8 @@ fetch_pattern:                                      ; [todo] name
 @retrig:
 @pattern_break:
 @set_speed_value2:
-@set_wave:
-@enable_noise_channel:
+;@set_wave:
+;@enable_noise_channel:
 @set_LFO_mode:
 @set_LFO_speed:
 @note_slide_up:
@@ -625,12 +762,65 @@ fetch_pattern:                                      ; [todo] name
 @global_fine_tune:
 @set_sample_bank:
 @set_volume:
-@set_instrument:
+;@set_instrument:
 @note_on:
 @set_samples:
-    lda    [player.ptr], Y
+    lda    [dmf.player.ptr], Y
     iny
 @note_off:
+    rts
+
+;;------------------------------------------------------------------------------------------
+@set_wave:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+
+    cmp    dmf.player.wave.id, X
+    beq    @skip
+        sta    dmf.player.wave.id, X
+        lda    <dmf.player.chn.flag, X
+        ora    #%0100_0000
+        sta    <dmf.player.chn.flag, X
+        rts
+@skip:
+    lda    <dmf.player.chn.flag, X
+    and    #%0100_0000
+    sta    <dmf.player.chn.flag, X
+    rts
+
+;;------------------------------------------------------------------------------------------
+@enable_noise_channel:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+
+    and    #%1111_1110
+    ora    <dmf.player.chn.flag, X
+    sta    <dmf.player.chn.flag, X
+    beq    @enable_noise_channel.end
+        lda    <dmf.player.note, X
+        ora    #$80
+        sta    <dmf.player.note, X
+@enable_noise_channel.end:
+    rts
+
+;;------------------------------------------------------------------------------------------
+@set_instrument:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+
+    ; [todo] 
+
+    lda    #%0100_0000                              ; [dummy]
+    sta    <dmf.player.chn.flag, X                  ; [dummy]
+    txa                                             ; [dummy]
+    sta    dmf.player.wave.id, X                    ; [dummy]
+
     rts
 
 ;;------------------------------------------------------------------------------------------
@@ -638,4 +828,4 @@ fetch_pattern:                                      ; [todo] name
     .org (* + $ff) & $ff00
     .include "mul.inc"
     .include "sin.inc"
-player_end:
+dmf.player.end:
