@@ -56,6 +56,13 @@ RestEx             = $3f ; For values >= 64
 Rest               = $40 ; For values between 0 and 63
 
 ;;------------------------------------------------------------------------------------------
+PCM_UPDATE = %1000_0000
+WAV_UPDATE = %0100_0000
+PAN_UPDATE = %0010_0000
+FRQ_UPDATE = %0001_0000
+NOI_UPDATE = %0000_0001
+
+;;------------------------------------------------------------------------------------------
     .zp
 dmf.zp.begin:
 
@@ -81,7 +88,6 @@ dmf.player.volume .ds DMF_CHAN_COUNT
 dmf.player.rest   .ds DMF_CHAN_COUNT
 
 ; [todo] arpeggio, vibrato, etc...
-; [todo] instrument states (volume, arpeggio, wave)
 
                                     ; 0: backup of header mpr
 dmf.player.mpr_backup .ds 2         ; 1: backup of data mpr
@@ -93,6 +99,7 @@ dmf.player.tick .ds 2               ; current time tick (fine/coarse kinda sort 
 
 dmf.player.pattern.pos  .ds 1       ; current pattern position
 
+; [todo] do we need this in zp?
 dmf.player.samples.rate.lo       .ds 2 ; PCM sample rate (RCR offset LSB) 
 dmf.player.samples.rate.hi       .ds 2 ; PCM sample rate (RCR offset MSB)
 dmf.player.samples.offset.lo     .ds 2 ; PCM samples ROM offset (LSB)
@@ -124,6 +131,28 @@ dmf.player.pattern.lo   .ds DMF_CHAN_COUNT
 dmf.player.pattern.hi   .ds DMF_CHAN_COUNT
 
 dmf.player.wave.id .ds DMF_CHAN_COUNT
+
+dmf.player.note.previous .ds DMF_CHAN_COUNT
+
+dmf.instrument.flag .ds PSG_CHAN_COUNT              ; [todo] enum and all
+
+dmf.instrument.vol.size  .ds PSG_CHAN_COUNT
+dmf.instrument.vol.loop  .ds PSG_CHAN_COUNT
+dmf.instrument.vol.lo    .ds PSG_CHAN_COUNT
+dmf.instrument.vol.hi    .ds PSG_CHAN_COUNT
+dmf.instrument.vol.index .ds PSG_CHAN_COUNT
+
+dmf.instrument.arp.size  .ds PSG_CHAN_COUNT
+dmf.instrument.arp.loop  .ds PSG_CHAN_COUNT
+dmf.instrument.arp.lo    .ds PSG_CHAN_COUNT
+dmf.instrument.arp.hi    .ds PSG_CHAN_COUNT
+dmf.instrument.arp.index .ds PSG_CHAN_COUNT
+
+dmf.instrument.wav.size  .ds PSG_CHAN_COUNT
+dmf.instrument.wav.loop  .ds PSG_CHAN_COUNT
+dmf.instrument.wav.lo    .ds PSG_CHAN_COUNT
+dmf.instrument.wav.hi    .ds PSG_CHAN_COUNT
+dmf.instrument.wav.index .ds PSG_CHAN_COUNT
 
 dmf.bss.end:
 
@@ -446,7 +475,18 @@ dmf_load_song:
     sta    <dmf.player.psg.pan, X
     
     ; [todo] default player sate
+    stz    dmf.player.note.previous, X
+    stz    dmf.player.note, X
+
     ; [todo] reset dmf.player.chn.flag
+
+    ; preload wav buffers
+    stx    psg_ch
+    lda    dmf.song.wave
+    sta    <dmf.player.si
+    lda    dmf.song.wave+1
+    sta    <dmf.player.si+1
+    jsr    dmf_wave_upload
 
     inx
     cpx    #DMF_CHAN_COUNT
@@ -542,6 +582,9 @@ dmf_update:
 
     bsr    update_song
 ; [todo]    jsr    update_psg
+; [todo]        1. update states according to instruments
+; [todo]        2. update sattes according to effects
+; [todo]        3. prepare next psg reg values?
 
     pla
     tam    #DMF_DATA_MPR
@@ -763,11 +806,34 @@ fetch_pattern:                                      ; [todo] name
 @set_sample_bank:
 @set_volume:
 ;@set_instrument:
-@note_on:
+;@note_on:
 @set_samples:
     lda    [dmf.player.ptr], Y
     iny
 @note_off:
+    rts
+
+;;------------------------------------------------------------------------------------------
+@note_on:
+    ldx    <dmf.player.chn
+    lda    dmf.player.note, X
+    sta    dmf.player.note.previous, X
+
+    lda    [dmf.player.ptr], Y
+    sta    dmf.player.note, X
+    iny
+    
+    lda    <dmf.player.chn.flag, X
+    bmi    @pcm_reset
+    ; [todo] retrig volume
+    ; [todo] retrig frequency update
+    
+    ; reset instrument indices
+    stz    dmf.instrument.vol.index, X
+    stz    dmf.instrument.arp.index, X
+    rts
+@pcm_reset:
+    ; [todo]
     rts
 
 ;;------------------------------------------------------------------------------------------
@@ -781,12 +847,12 @@ fetch_pattern:                                      ; [todo] name
     beq    @skip
         sta    dmf.player.wave.id, X
         lda    <dmf.player.chn.flag, X
-        ora    #%0100_0000
+        ora    #WAV_UPDATE
         sta    <dmf.player.chn.flag, X
         rts
 @skip:
     lda    <dmf.player.chn.flag, X
-    and    #%0100_0000
+    and    #WAV_UPDATE
     sta    <dmf.player.chn.flag, X
     rts
 
@@ -797,7 +863,7 @@ fetch_pattern:                                      ; [todo] name
     lda    [dmf.player.ptr], Y
     iny
 
-    and    #%1111_1110
+    and    #(~NOI_UPDATE)
     ora    <dmf.player.chn.flag, X
     sta    <dmf.player.chn.flag, X
     beq    @enable_noise_channel.end
@@ -814,12 +880,154 @@ fetch_pattern:                                      ; [todo] name
     lda    [dmf.player.ptr], Y
     iny
 
-    ; [todo] 
+    clc
+    adc    dmf.song.instruments
+    sta    <dmf.player.si
+    cla
+    adc    dmf.song.instruments+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.vol.size, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
 
-    lda    #%0100_0000                              ; [dummy]
-    sta    <dmf.player.chn.flag, X                  ; [dummy]
-    txa                                             ; [dummy]
-    sta    dmf.player.wave.id, X                    ; [dummy]
+    lda    [dmf.player.si]
+    sta    dmf.instrument.vol.loop, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.vol.lo, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.vol.hi, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+
+    lda    [dmf.player.si]
+    sta    dmf.instrument.arp.size, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+
+    lda    [dmf.player.si]
+    sta    dmf.instrument.arp.loop, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.arp.lo, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.arp.hi, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.wav.size, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+
+    lda    [dmf.player.si]
+    sta    dmf.instrument.wav.loop, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.wav.lo, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+    
+    lda    [dmf.player.si]
+    sta    dmf.instrument.wav.hi, X
+    lda    <dmf.player.si
+    clc
+    adc    dmf.song.instrument_count
+    sta    <dmf.player.si
+    cla
+    adc    <dmf.player.si+1
+    sta    <dmf.player.si+1
+
+    lda    [dmf.player.si]
+    
+    stz    dmf.instrument.vol.index, X
+    stz    dmf.instrument.arp.index, X
+    stz    dmf.instrument.wav.index, X
+
+    phy
+    ldy    dmf.instrument.vol.size, X
+    beq    @no_vol
+        ora    #%0000_0001
+@no_vol:
+    ldy    dmf.instrument.arp.size, X
+    beq    @no_arp
+        ora    #%0000_0010
+@no_arp:
+    ldy    dmf.instrument.wav.size, X
+    beq    @no_wav
+        ora    #%0000_0100
+@no_wav:
+    sta    dmf.instrument.flag, X
+    ply
 
     rts
 
