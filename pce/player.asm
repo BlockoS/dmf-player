@@ -43,7 +43,7 @@ Retrig             = $0f
 PatternBreak       = $10
 ExtendedCommands   = $11
 SetSpeedValue2     = $12
-SetWave            = $13
+SetWav             = $13
 EnableNoiseChannel = $14
 SetLFOMode         = $15
 SetLFOSpeed        = $16
@@ -61,6 +61,11 @@ WAV_UPDATE = %0100_0000
 PAN_UPDATE = %0010_0000
 FRQ_UPDATE = %0001_0000
 NOI_UPDATE = %0000_0001
+
+;;------------------------------------------------------------------------------------------
+INST_VOL = %0000_0001
+INST_ARP = %0000_0010
+INST_WAV = %0000_0100
 
 ;;------------------------------------------------------------------------------------------
     .zp
@@ -86,6 +91,8 @@ dmf.player.flag   .ds 1
 dmf.player.note   .ds DMF_CHAN_COUNT
 dmf.player.volume .ds DMF_CHAN_COUNT
 dmf.player.rest   .ds DMF_CHAN_COUNT
+
+dmf.player.delay  .ds DMF_CHAN_COUNT
 
 ; [todo] arpeggio, vibrato, etc...
 
@@ -122,7 +129,7 @@ dmf.song.time.tick .ds 2
 dmf.song.pattern.rows .ds 1
 dmf.song.matrix.rows  .ds 1
 dmf.song.instrument_count  .ds 1
-dmf.song.wave              .ds 2
+dmf.song.wav               .ds 2
 dmf.song.instruments       .ds 2
 dmf.song.matrix            .ds 2
 
@@ -130,7 +137,7 @@ dmf.player.pattern.bank .ds DMF_CHAN_COUNT
 dmf.player.pattern.lo   .ds DMF_CHAN_COUNT
 dmf.player.pattern.hi   .ds DMF_CHAN_COUNT
 
-dmf.player.wave.id .ds DMF_CHAN_COUNT
+dmf.player.wav.id .ds DMF_CHAN_COUNT
 
 dmf.player.note.previous .ds DMF_CHAN_COUNT
 
@@ -232,7 +239,7 @@ dmf_commit:
         ; [todo] pcm
 @wav\1:
     bbr6   <dmf.player.chn.flag+\1, @pan\1
-        lda    dmf.player.wave.id+\1
+        lda    dmf.player.wav.id+\1
         jsr    @load_wav
 @pan\1:
     bbr5   <dmf.player.chn.flag+\1, @freq\1
@@ -299,23 +306,23 @@ dmf_commit:
 
     sax
 
-    lda    dmf.song.wave
+    lda    dmf.song.wav
     clc
     adc    <dmf.player.si
     sta    <dmf.player.si
 
     sax
-    adc    dmf.song.wave+1
+    adc    dmf.song.wav+1
     sta    <dmf.player.si+1
 
 ;;
-;; Function: dmf_wave_upload
+;; Function: dmf_wav_upload
 ;;
 ;; Parameters:
 ;;
 ;; Return:
 ;;
-dmf_wave_upload:
+dmf_wav_upload:
     stz    psg_ctrl
     cly
 @l0:                                ; [todo] unroll?
@@ -477,16 +484,17 @@ dmf_load_song:
     ; [todo] default player sate
     stz    dmf.player.note.previous, X
     stz    dmf.player.note, X
+    stz    dmf.player.delay, X
 
     ; [todo] reset dmf.player.chn.flag
 
     ; preload wav buffers
     stx    psg_ch
-    lda    dmf.song.wave
+    lda    dmf.song.wav
     sta    <dmf.player.si
-    lda    dmf.song.wave+1
+    lda    dmf.song.wav+1
     sta    <dmf.player.si+1
-    jsr    dmf_wave_upload
+    jsr    dmf_wav_upload
 
     inx
     cpx    #DMF_CHAN_COUNT
@@ -581,9 +589,11 @@ dmf_update:
     tam    #DMF_HEADER_MPR
 
     bsr    update_song
-; [todo]    jsr    update_psg
+    
+    clx
+    bsr    update_state
 ; [todo]        1. update states according to instruments
-; [todo]        2. update sattes according to effects
+; [todo]        2. update states according to effects
 ; [todo]        3. prepare next psg reg values?
 
     pla
@@ -593,6 +603,53 @@ dmf_update:
     
     rts
 
+update_state:                                 ; [todo] find a better name
+    ; -- instrument wav                       ; [todo] make a routine?
+    lda    dmf.instrument.flag, X
+    bit    #INST_WAV
+    beq    @no_wav
+
+    ldy    dmf.instrument.wav.index, X
+    lda    dmf.instrument.wav.lo, X
+    sta    <dmf.player.si
+    lda    dmf.instrument.wav.hi, X
+    sta    <dmf.player.si+1
+    lda    [dmf.player.si], Y
+    
+    cmp    dmf.player.wav.id, X
+    beq    @load_wav.skip
+        jsr    dmf.set_wav.ex
+@load_wav.skip:
+    inc    dmf.instrument.wav.index, X
+    lda    dmf.instrument.wav.index, X
+    cmp    dmf.instrument.wav.size, X
+    bcc    @no_wav.reset
+        lda    dmf.instrument.wav.loop, X
+        cmp    #$ff
+        bne    @wav.reset
+            lda    dmf.instrument.flag, X
+            and    #~INST_WAV
+            sta    dmf.instrument.flag, X
+            cla
+@wav.reset:
+        sta    dmf.instrument.wav.index, X
+@no_wav.reset:
+
+@no_wav:
+    
+    ; [todo]    2. instrument arpeggio
+    ; [todo]    3. effect arpegio
+    ; [todo]    4. instrument volume
+    ; [todo]    5. volume slide
+    ; [todo]    6. set volume
+    ; [todo]    8. portamento
+    ; [todo]    9. vibrato
+    ; [todo]    A. set frequency  
+    ; [todo] regroup volume / note / frequency updates
+    
+    rts
+
+
 ;;
 ;; Function: update_song
 ;;
@@ -600,7 +657,7 @@ dmf_update:
 ;;
 ;; Return:
 ;;
-update_song:                                        ; [todo] rename
+update_song:
     stz    <dmf.player.flag
     
     dec    <dmf.player.tick
@@ -645,7 +702,7 @@ update_song:                                        ; [todo] rename
         rts
 @l3:
     jsr   dmf_update_matrix
-    jmp   update_song                               ; [todo] name
+    jmp   update_song
 
 ;;
 ;; Function: update_chan
@@ -740,81 +797,128 @@ fetch_pattern:                                      ; [todo] name
 
 ;;------------------------------------------------------------------------------------------
 @pattern_data_func:
-    .dw @arpeggio
-    .dw @arpeggio_speed
-    .dw @portamento_up
-    .dw @portamento_down
-    .dw @portamento_to_note
-    .dw @vibrato
-    .dw @vibrato_mode
-    .dw @vibrato_depth
-    .dw @port_to_note_vol_slide
-    .dw @vibrato_vol_slide
-    .dw @tremolo
-    .dw @panning
-    .dw @set_speed_value1
-    .dw @volume_slide
-    .dw @position_jump
-    .dw @retrig
-    .dw @pattern_break
-    .dw @set_speed_value2
-    .dw @set_wave
-    .dw @enable_noise_channel
-    .dw @set_LFO_mode
-    .dw @set_LFO_speed
-    .dw @note_slide_up
-    .dw @note_slide_down
-    .dw @note_delay
-    .dw @sync_signal
-    .dw @fine_tune
-    .dw @global_fine_tune
-    .dw @set_sample_bank
-    .dw @set_volume
-    .dw @set_instrument
-    .dw @note_on
-    .dw @note_off
-    .dw @set_samples
+    .dw dmf.arpeggio
+    .dw dmf.arpeggio_speed
+    .dw dmf.portamento_up
+    .dw dmf.portamento_down
+    .dw dmf.portamento_to_note
+    .dw dmf.vibrato
+    .dw dmf.vibrato_mode
+    .dw dmf.vibrato_depth
+    .dw dmf.port_to_note_vol_slide
+    .dw dmf.vibrato_vol_slide
+    .dw dmf.tremolo
+    .dw dmf.panning
+    .dw dmf.set_speed_value1
+    .dw dmf.volume_slide
+    .dw dmf.position_jump
+    .dw dmf.retrig
+    .dw dmf.pattern_break
+    .dw dmf.set_speed_value2
+    .dw dmf.set_wav
+    .dw dmf.enable_noise_channel
+    .dw dmf.set_LFO_mode
+    .dw dmf.set_LFO_speed
+    .dw dmf.note_slide_up
+    .dw dmf.note_slide_down
+    .dw dmf.note_delay
+    .dw dmf.sync_signal
+    .dw dmf.fine_tune
+    .dw dmf.global_fine_tune
+    .dw dmf.set_sample_bank
+    .dw dmf.set_volume
+    .dw dmf.set_instrument
+    .dw dmf.note_on
+    .dw dmf.note_off
+    .dw dmf.set_samples
+
+; [todo]
+;       dmf.vibrato_mode
+;       dmf.vibrato_depth
+;       dmf.port_to_note_vol_slide
+;       dmf.vibrato_vol_slide
+;       dmf.tremolo
+;       dmf.set_speed_value1
+;       dmf.retrig
+;       dmf.set_speed_value2
+;       dmf.set_LFO_mode
+;       dmf.set_LFO_speed
+;       dmf.note_slide_up
+;       dmf.note_slide_down
+;       dmf.sync_signal
+
 ;;------------------------------------------------------------------------------------------
-@arpeggio:
-@arpeggio_speed:
-@portamento_up:
-@portamento_down:
-@portamento_to_note:
-@vibrato:
-@vibrato_mode:
-@vibrato_depth:
-@port_to_note_vol_slide:
-@vibrato_vol_slide:
-@tremolo:
-@panning:
-@set_speed_value1:
-@volume_slide:
-@position_jump:
-@retrig:
-@pattern_break:
-@set_speed_value2:
-;@set_wave:
-;@enable_noise_channel:
-@set_LFO_mode:
-@set_LFO_speed:
-@note_slide_up:
-@note_slide_down:
-@note_delay:
-@sync_signal:
-@fine_tune:
-@global_fine_tune:
-@set_sample_bank:
-@set_volume:
-;@set_instrument:
-;@note_on:
-@set_samples:
+dmf.arpeggio:
+dmf.arpeggio_speed:
+dmf.portamento_up:
+dmf.portamento_down:
+dmf.portamento_to_note:
+dmf.vibrato:
+dmf.vibrato_mode:
+dmf.vibrato_depth:
+dmf.port_to_note_vol_slide:
+dmf.vibrato_vol_slide:
+dmf.tremolo:
+dmf.panning:
+dmf.set_speed_value1:
+dmf.volume_slide:
+dmf.position_jump:
+dmf.retrig:
+dmf.pattern_break:
+dmf.set_speed_value2:
+;dmf.set_wav:
+;dmf.enable_noise_channel:
+dmf.set_LFO_mode:
+dmf.set_LFO_speed:
+dmf.note_slide_up:
+dmf.note_slide_down:
+;dmf.note_delay:
+dmf.sync_signal:
+dmf.fine_tune:
+dmf.global_fine_tune:
+dmf.set_sample_bank:
+dmf.set_volume:
+;dmf.set_instrument:
+;dmf.note_on:
+dmf.set_samples:
     lda    [dmf.player.ptr], Y
     iny
-@note_off:
     rts
 
 ;;------------------------------------------------------------------------------------------
-@note_on:
+dmf.note_delay:
+    lda    <dmf.player.pattern.pos
+    and    #$01
+    tax
+    
+    lda    [dmf.player.ptr], Y
+    iny
+
+    cmp    dmf.player.tick, X
+    bcs    @note_delay.reset
+@note_delay.set:
+        ldx    <dmf.player.chn
+
+        ; [todo] trigger note update
+
+        lda    dmf.player.chn.flag, X
+        and    #~FRQ_UPDATE
+        sta    dmf.player.chn.flag, X
+        
+        sta    <dmf.player.delay, X
+        rts
+@note_delay.reset:
+        ldx    <dmf.player.chn
+        stz    <dmf.player.delay, X
+        rts
+
+;;------------------------------------------------------------------------------------------
+dmf.note_off:
+    ; [todo] reset flags
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.note_on:
     ldx    <dmf.player.chn
     lda    dmf.player.note, X
     sta    dmf.player.note.previous, X
@@ -825,27 +929,30 @@ fetch_pattern:                                      ; [todo] name
     
     lda    <dmf.player.chn.flag, X
     bmi    @pcm_reset
-    ; [todo] retrig volume
-    ; [todo] retrig frequency update
-    
+
+    ; [todo] flag to trigger note update    
+    ; [todo] reinit volume
+    ; [todo] tring note/freq update
+
     ; reset instrument indices
     stz    dmf.instrument.vol.index, X
     stz    dmf.instrument.arp.index, X
+    
     rts
 @pcm_reset:
     ; [todo]
     rts
 
 ;;------------------------------------------------------------------------------------------
-@set_wave:
+dmf.set_wav:
     ldx    <dmf.player.chn
 
     lda    [dmf.player.ptr], Y
     iny
-
-    cmp    dmf.player.wave.id, X
+dmf.set_wav.ex:
+    cmp    dmf.player.wav.id, X
     beq    @skip
-        sta    dmf.player.wave.id, X
+        sta    dmf.player.wav.id, X
         lda    <dmf.player.chn.flag, X
         ora    #WAV_UPDATE
         sta    <dmf.player.chn.flag, X
@@ -857,7 +964,7 @@ fetch_pattern:                                      ; [todo] name
     rts
 
 ;;------------------------------------------------------------------------------------------
-@enable_noise_channel:
+dmf.enable_noise_channel:
     ldx    <dmf.player.chn
 
     lda    [dmf.player.ptr], Y
@@ -874,7 +981,7 @@ fetch_pattern:                                      ; [todo] name
     rts
 
 ;;------------------------------------------------------------------------------------------
-@set_instrument:
+dmf.set_instrument:
     ldx    <dmf.player.chn
 
     lda    [dmf.player.ptr], Y
@@ -1016,15 +1123,15 @@ fetch_pattern:                                      ; [todo] name
     phy
     ldy    dmf.instrument.vol.size, X
     beq    @no_vol
-        ora    #%0000_0001
+        ora    #INST_VOL
 @no_vol:
     ldy    dmf.instrument.arp.size, X
     beq    @no_arp
-        ora    #%0000_0010
+        ora    #INST_ARP
 @no_arp:
     ldy    dmf.instrument.wav.size, X
     beq    @no_wav
-        ora    #%0000_0100
+        ora    #INST_WAV
 @no_wav:
     sta    dmf.instrument.flag, X
     ply
