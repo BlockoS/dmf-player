@@ -68,6 +68,12 @@ INST_ARP = %0000_0010
 INST_WAV = %0000_0100
 
 ;;------------------------------------------------------------------------------------------
+;_VIBRATO
+;_VOLUME
+;_VOL_SLIDE
+;_NOTE
+
+;;------------------------------------------------------------------------------------------
     .zp
 dmf.zp.begin:
 
@@ -78,6 +84,10 @@ dmf.player.si .ds 2
 dmf.player.ax:
 dmf.player.al .ds 1
 dmf.player.ah .ds 1
+dmf.player.bl .ds 1
+dmf.player.bh .ds 1
+dmf.player.cl .ds 1
+dmf.player.ch .ds 1
 
 dmf.player.ptr .ds 2
 
@@ -88,13 +98,11 @@ dmf.player.psg.freq.hi .ds DMF_CHAN_COUNT
 dmf.player.psg.pan     .ds DMF_CHAN_COUNT
 
 dmf.player.flag   .ds 1
-dmf.player.note   .ds DMF_CHAN_COUNT
-dmf.player.volume .ds DMF_CHAN_COUNT
+dmf.player.note   .ds DMF_CHAN_COUNT            ; [todo] move to bss?
+dmf.player.volume .ds DMF_CHAN_COUNT            ; [todo] move to bss?
 dmf.player.rest   .ds DMF_CHAN_COUNT
 
 dmf.player.delay  .ds DMF_CHAN_COUNT
-
-; [todo] arpeggio, vibrato, etc...
 
                                     ; 0: backup of header mpr
 dmf.player.mpr_backup .ds 2         ; 1: backup of data mpr
@@ -105,6 +113,8 @@ dmf.player.matrix.row .ds 1         ; current matrix row
 dmf.player.tick .ds 2               ; current time tick (fine/coarse kinda sort off)
 
 dmf.player.pattern.pos  .ds 1       ; current pattern position
+
+dmf.player.detune .ds 1             ; global detune
 
 ; [todo] do we need this in zp?
 dmf.player.samples.rate.lo       .ds 2 ; PCM sample rate (RCR offset LSB) 
@@ -140,6 +150,9 @@ dmf.player.pattern.hi   .ds DMF_CHAN_COUNT
 dmf.player.wav.id .ds DMF_CHAN_COUNT
 
 dmf.player.note.previous .ds DMF_CHAN_COUNT
+dmf.player.volume.orig   .ds DMF_CHAN_COUNT
+
+; [todo] next note for delay ?
 
 dmf.instrument.flag .ds PSG_CHAN_COUNT              ; [todo] enum and all
 
@@ -160,6 +173,11 @@ dmf.instrument.wav.loop  .ds PSG_CHAN_COUNT
 dmf.instrument.wav.lo    .ds PSG_CHAN_COUNT
 dmf.instrument.wav.hi    .ds PSG_CHAN_COUNT
 dmf.instrument.wav.index .ds PSG_CHAN_COUNT
+
+dmf.fx.arp.data    .ds PSG_CHAN_COUNT
+dmf.fx.arp.current .ds PSG_CHAN_COUNT
+dmf.fx.arp.tick    .ds PSG_CHAN_COUNT
+dmf.fx.arp.speed   .ds PSG_CHAN_COUNT
 
 dmf.bss.end:
 
@@ -588,13 +606,10 @@ dmf_update:
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
 
-    bsr    update_song
+    jsr    update_song
     
     clx
-    bsr    update_state
-; [todo]        1. update states according to instruments
-; [todo]        2. update states according to effects
-; [todo]        3. prepare next psg reg values?
+    jsr    update_state
 
     pla
     tam    #DMF_DATA_MPR
@@ -637,14 +652,154 @@ update_state:                                 ; [todo] find a better name
 
 @no_wav:
     
-    ; [todo]    2. instrument arpeggio
-    ; [todo]    3. effect arpegio
-    ; [todo]    4. instrument volume
-    ; [todo]    5. volume slide
-    ; [todo]    6. set volume
+    ; -- global detune fx
+    lda    dmf.player.note, X
+    clc
+    adc    <dmf.player.detune
+    sta    <dmf.player.cl
+
+    ; -- instrument arpeggio
+    lda    dmf.instrument.flag, X
+    bit    #INST_ARP 
+    beq    @no_arp
+    bit    #%1000_0000                                          ; [todo] what is it for ? 
+    beq    @std.arp
+@fixed.arp:
+        ldy    dmf.instrument.arp.index, X                      ; [todo] We'll find a clever implementation later.
+        lda    dmf.instrument.arp.lo, X
+        sta    <dmf.player.si
+        lda    dmf.instrument.arp.hi, X
+        sta    <dmf.player.si+1
+        lda    [dmf.player.si], Y        
+        bra    @arp.store
+@std.arp:
+    ldy    dmf.instrument.arp.index, X
+    lda    dmf.instrument.arp.lo, X
+    sta    <dmf.player.si
+    lda    dmf.instrument.arp.hi, X
+    sta    <dmf.player.si+1
+    lda    [dmf.player.si], Y
+    sec
+    sbc    #$0c                                         ; add an octacve
+    clc
+    adc    <dmf.player.cl
+@arp.store:
+    sta    <dmf.player.cl
+
+    inc    dmf.instrument.arp.index, X
+    lda    dmf.instrument.arp.index, X
+    cmp    dmf.instrument.arp.size, X
+    bcc    @no_arp.reset
+        lda    dmf.instrument.arp.loop, X
+        cmp    #$ff
+        bne    @arp.reset
+            lda    dmf.instrument.flag, X
+            and    #~INST_ARP
+            sta    dmf.instrument.flag, X
+            cla
+@arp.reset:
+        sta    dmf.instrument.arp.index, X
+@no_arp.reset:
+    ;smb2   <player.al                                      ; [todo] state to pass to psg reg update
+@no_arp:
+
+    ; -- effect arpeggio
+    ldy    dmf.fx.arp.data, X
+    beq    @no_arpeggio
+    dec    dmf.fx.arp.tick, X
+    bne    @no_arpeggio
+        lda    dmf.fx.arp.speed, X
+        sta    dmf.fx.arp.tick, X
+
+        tya
+
+        ; [todo] smb2   <player.al
+        ldy    dmf.fx.arp.current, X
+        beq    @arpeggio.0
+        
+        cpy    #1
+        beq    @arpeggio.1
+@arpeggio.2:
+            ldy    #$ff
+            lsr    A
+            lsr    A
+            lsr    A
+            lsr    A
+@arpeggio.1:
+        and    #$0f
+        clc
+        adc    <dmf.player.cl
+        sta    <dmf.player.cl
+@arpeggio.0:
+        iny
+        tya
+        sta    dmf.fx.arp.current, X
+@no_arpeggio:
+
+    ; -- instrument volume
+    lda    dmf.instrument.flag, X
+    bit    #INST_VOL 
+    beq    @std_volume
+        ldy    dmf.instrument.vol.index, X
+        lda    dmf.instrument.vol.lo, X
+        sta    <dmf.player.si
+        lda    dmf.instrument.vol.hi, X
+        sta    <dmf.player.si+1
+        lda    [dmf.player.si], Y
+        inc    A
+        ldy    dmf.player.volume.orig, X
+        phx
+        jsr    mul8
+        asl    A
+; [todo]        sta    <_volume
+        plx
+        sta    dmf.player.volume, X
+
+        inc    dmf.instrument.vol.index, X
+        lda    dmf.instrument.vol.index, X
+        cmp    dmf.instrument.vol.size, X
+        bcc    @no_volume.reset
+            lda    dmf.instrument.vol.loop, X
+            cmp    #$ff
+            bne    @volume.reset
+                lda    dmf.instrument.flag, X
+                and    #~INST_VOL
+                sta    dmf.instrument.flag, X
+                cla
+@volume.reset:
+            sta    dmf.instrument.vol.index, X
+@no_volume.reset:
+; [todo]        smb1   <player.al
+        bra    @no_volume
+@std_volume:
+; [todo]    bbr1   <player.al, @no_volume
+        lda    dmf.player.volume, X
+; [todo]        sta    <_volume
+@no_volume:
+
+    ; -- fx volume slide
+; [todo]    bbr3   <player.al, @no_volume_slide
+; [todo]        smb1   <player.al
+; [todo]        lda    player.volume, X
+; [todo]        clc
+; [todo]        adc    player.volume.delta, X
+; [todo]        bpl    @vol.plus
+; [todo]            cla
+; [todo]            rmb3   <player.al
+; [todo]            bra    @set_volume
+; [todo]@vol.plus:
+; [todo]        cmp    #$7c
+; [todo]        bcc    @set_volume
+; [todo]            lda    #$7c
+; [todo]            rmb3   <player.al
+; [todo]@set_volume:
+; [todo]        sta    player.volume, X
+; [todo]@no_volume_slide:
+
     ; [todo]    8. portamento
     ; [todo]    9. vibrato
     ; [todo]    A. set frequency  
+
     ; [todo] regroup volume / note / frequency updates
     
     rts
@@ -848,8 +1003,8 @@ fetch_pattern:                                      ; [todo] name
 ;       dmf.sync_signal
 
 ;;------------------------------------------------------------------------------------------
-dmf.arpeggio:
-dmf.arpeggio_speed:
+;dmf.arpeggio:
+;dmf.arpeggio_speed:
 dmf.portamento_up:
 dmf.portamento_down:
 dmf.portamento_to_note:
@@ -875,7 +1030,7 @@ dmf.note_slide_down:
 ;dmf.note_delay:
 dmf.sync_signal:
 dmf.fine_tune:
-dmf.global_fine_tune:
+;dmf.global_fine_tune:
 dmf.set_sample_bank:
 dmf.set_volume:
 ;dmf.set_instrument:
@@ -883,6 +1038,18 @@ dmf.set_volume:
 dmf.set_samples:
     lda    [dmf.player.ptr], Y
     iny
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.global_fine_tune:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+
+    clc
+    adc    <dmf.player.detune
+    sta    <dmf.player.detune
     rts
 
 ;;------------------------------------------------------------------------------------------
@@ -1136,6 +1303,27 @@ dmf.set_instrument:
     sta    dmf.instrument.flag, X
     ply
 
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.arpeggio_speed:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+    sta    dmf.fx.arp.speed, X
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.arpeggio:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+    sta    dmf.fx.arp.data, X
+    lda    dmf.fx.arp.speed, X
+    sta    dmf.fx.arp.tick, X
+    stz    dmf.fx.arp.current, X
     rts
 
 ;;------------------------------------------------------------------------------------------
