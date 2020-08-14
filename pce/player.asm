@@ -4,9 +4,10 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-;    fx callback : don't set psg reg
-;    fx callback : bring back code
-;    commit psg reg / upload wav / start pcm in irq1
+; dmf.vibrato
+; dmf.portamento_up
+; dmf.portamento_down
+; dmf.portamento_to_note
 
 ;;------------------------------------------------------------------------------------------
 
@@ -68,12 +69,6 @@ INST_ARP = %0000_0010
 INST_WAV = %0000_0100
 
 ;;------------------------------------------------------------------------------------------
-;_VIBRATO
-;_VOLUME
-;_VOL_SLIDE
-;_NOTE
-
-;;------------------------------------------------------------------------------------------
     .zp
 dmf.zp.begin:
 
@@ -81,13 +76,14 @@ mul8.lo .ds 4
 mul8.hi .ds 4
 
 dmf.player.si .ds 2
-dmf.player.ax:
 dmf.player.al .ds 1
 dmf.player.ah .ds 1
 dmf.player.bl .ds 1
 dmf.player.bh .ds 1
 dmf.player.cl .ds 1
 dmf.player.ch .ds 1
+dmf.player.dl .ds 1
+dmf.player.dh .ds 1
 
 dmf.player.ptr .ds 2
 
@@ -100,7 +96,7 @@ dmf.player.psg.pan     .ds DMF_CHAN_COUNT
 dmf.player.flag   .ds 1
 dmf.player.note   .ds DMF_CHAN_COUNT            ; [todo] move to bss?
 dmf.player.volume .ds DMF_CHAN_COUNT            ; [todo] move to bss?
-dmf.player.rest   .ds DMF_CHAN_COUNT
+dmf.player.rest   .ds DMF_CHAN_COUNT            ; [todo] move to bss?
 
 dmf.player.delay  .ds DMF_CHAN_COUNT
 
@@ -150,11 +146,12 @@ dmf.player.pattern.hi   .ds DMF_CHAN_COUNT
 dmf.player.wav.id .ds DMF_CHAN_COUNT
 
 dmf.player.note.previous .ds DMF_CHAN_COUNT
-dmf.player.volume.orig   .ds DMF_CHAN_COUNT
 
 ; [todo] next note for delay ?
+dmf.player.volume.offset .ds DMF_CHAN_COUNT
+dmf.player.volume.delta .ds DMF_CHAN_COUNT
 
-dmf.instrument.flag .ds PSG_CHAN_COUNT              ; [todo] enum and all
+dmf.instrument.flag .ds PSG_CHAN_COUNT
 
 dmf.instrument.vol.size  .ds PSG_CHAN_COUNT
 dmf.instrument.vol.loop  .ds PSG_CHAN_COUNT
@@ -227,27 +224,33 @@ mul8:
 
 ;;
 dmf_commit:
-    stz    psg_ch                                 ; update PSG control register
+    clx
+    stx    psg_ch                                 ; update PSG control register
     lda    <dmf.player.psg.ctrl+0
     sta    psg_ctrl
 
-    inc    psg_ch
+    inx
+    stx    psg_ch
     lda    <dmf.player.psg.ctrl+1
     sta    psg_ctrl
 
-    inc    psg_ch
+    inx
+    stx    psg_ch
     lda    <dmf.player.psg.ctrl+2
     sta    psg_ctrl
 
-    inc    psg_ch
+    inx
+    stx    psg_ch
     lda    <dmf.player.psg.ctrl+3
     sta    psg_ctrl
 
-    inc    psg_ch
+    inx
+    stx    psg_ch
     lda    <dmf.player.psg.ctrl+4
     sta    psg_ctrl
 
-    inc    psg_ch
+    inx
+    stx    psg_ch
     lda    <dmf.player.psg.ctrl+5
     sta    psg_ctrl
 
@@ -259,54 +262,51 @@ dmf_commit:
     bbr6   <dmf.player.chn.flag+\1, @pan\1
         lda    dmf.player.wav.id+\1
         jsr    @load_wav
+        lda    <dmf.player.psg.ctrl+1
+        sta    psg_ctrl
+        rmb6   <dmf.player.chn.flag+\1
 @pan\1:
     bbr5   <dmf.player.chn.flag+\1, @freq\1
         lda    <dmf.player.psg.pan+\1
         sta    psg_pan
+        rmb5   <dmf.player.chn.flag+\1
 @freq\1:
     bbr4   <dmf.player.chn.flag+\1, @next\1
+.if \1 > 3
+        bbr0   <dmf.player.chn.flag+\1, @no_noise\1
+            lda    <dmf.player.psg.freq.lo+\1
+            sta    psg_noise
+            bra    @next\1
+@no_noise\1:
+            stz    psg_noise
+.else
         lda    <dmf.player.psg.freq.lo+\1
         sta    psg_freq.lo
         lda    <dmf.player.psg.freq.hi+\1
         sta    psg_freq.hi
+        rmb4   <dmf.player.chn.flag+\1
+.endif
 @next\1:
   .endm
 
-    stz    psg_ch
+    clx
+    stx    psg_ch
     dmf.update_psg 0
-    inc    psg_ch
+    inx
+    stx    psg_ch
     dmf.update_psg 1
-    inc    psg_ch
+    inx
+    stx    psg_ch
     dmf.update_psg 2
-    inc    psg_ch
+    inx
+    stx    psg_ch
     dmf.update_psg 3
-    inc    psg_ch
+    inx
+    stx    psg_ch
     dmf.update_psg 4
-    bbr0   <dmf.player.chn.flag+4, @no_noise0
-        cla
-        ldy    <dmf.player.note+4
-        bpl    @set_noise0
-            lda    noise_table, Y 
-@set_noise0:
-        sta    psg_noise
-@no_noise0:
-    inc    psg_ch
+    inx
+    stx    psg_ch
     dmf.update_psg 5
-    bbr0   <dmf.player.chn.flag+5, @no_noise1
-        cla
-        ldy    <dmf.player.note+5
-        bpl    @set_noise1
-            lda    noise_table, Y
-@set_noise1:
-        sta    psg_noise
-@no_noise1:
-
-    stz    <dmf.player.chn.flag+0
-    stz    <dmf.player.chn.flag+1
-    stz    <dmf.player.chn.flag+2
-    stz    <dmf.player.chn.flag+3
-    stz    <dmf.player.chn.flag+4
-    stz    <dmf.player.chn.flag+5
 
     rts
 
@@ -322,14 +322,14 @@ dmf_commit:
     lsr    A
     ror    <dmf.player.si
 
-    sax
+    say
 
     lda    dmf.song.wav
     clc
     adc    <dmf.player.si
     sta    <dmf.player.si
 
-    sax
+    say
     adc    dmf.song.wav+1
     sta    <dmf.player.si+1
 
@@ -349,7 +349,7 @@ dmf_wav_upload:
     sta    psg_wavebuf
     cpy    #$20
     bne    @l0
-    
+
     rts
 
 ;;
@@ -498,14 +498,19 @@ dmf_load_song:
 
     lda    #$ff
     sta    <dmf.player.psg.pan, X
+
+    lda    #$7c
+    sta    dmf.player.volume, X
     
-    ; [todo] default player sate
+    ; set default player sate
     stz    dmf.player.note.previous, X
     stz    dmf.player.note, X
     stz    dmf.player.delay, X
+    stz    dmf.player.volume.offset, X
+    stz    dmf.player.volume.delta, X
 
-    ; [todo] reset dmf.player.chn.flag
-
+    stz    dmf.instrument.flag, X
+    
     ; preload wav buffers
     stx    psg_ch
     lda    dmf.song.wav
@@ -610,6 +615,16 @@ dmf_update:
     
     clx
     jsr    update_state
+    ldx    #$01
+    jsr    update_state
+    ldx    #$02
+    jsr    update_state
+    ldx    #$03
+    jsr    update_state
+    ldx    #$04
+    jsr    update_state
+    ldx    #$05
+    jsr    update_state
 
     pla
     tam    #DMF_DATA_MPR
@@ -619,7 +634,10 @@ dmf_update:
     rts
 
 update_state:                                 ; [todo] find a better name
-    ; -- instrument wav                       ; [todo] make a routine?
+    lda    <dmf.player.chn.flag, X
+    sta    <dmf.player.al
+
+    ; -- instrument wav
     lda    dmf.instrument.flag, X
     bit    #INST_WAV
     beq    @no_wav
@@ -633,12 +651,13 @@ update_state:                                 ; [todo] find a better name
     
     cmp    dmf.player.wav.id, X
     beq    @load_wav.skip
-        jsr    dmf.set_wav.ex
+        sta    dmf.player.wav.id, X
+        smb6   <dmf.player.al
 @load_wav.skip:
     inc    dmf.instrument.wav.index, X
     lda    dmf.instrument.wav.index, X
     cmp    dmf.instrument.wav.size, X
-    bcc    @no_wav.reset
+    bcc    @no_wav
         lda    dmf.instrument.wav.loop, X
         cmp    #$ff
         bne    @wav.reset
@@ -648,8 +667,6 @@ update_state:                                 ; [todo] find a better name
             cla
 @wav.reset:
         sta    dmf.instrument.wav.index, X
-@no_wav.reset:
-
 @no_wav:
     
     ; -- global detune fx
@@ -680,7 +697,7 @@ update_state:                                 ; [todo] find a better name
     sta    <dmf.player.si+1
     lda    [dmf.player.si], Y
     sec
-    sbc    #$0c                                         ; add an octacve
+    sbc    #$0c                                                 ; add an octacve
     clc
     adc    <dmf.player.cl
 @arp.store:
@@ -700,7 +717,7 @@ update_state:                                 ; [todo] find a better name
 @arp.reset:
         sta    dmf.instrument.arp.index, X
 @no_arp.reset:
-    ;smb2   <player.al                                      ; [todo] state to pass to psg reg update
+    smb4   <dmf.player.al                                      ; we'll need to update frequency
 @no_arp:
 
     ; -- effect arpeggio
@@ -713,7 +730,7 @@ update_state:                                 ; [todo] find a better name
 
         tya
 
-        ; [todo] smb2   <player.al
+        smb4   <dmf.player.al                                   ; we'll need to update frequency
         ldy    dmf.fx.arp.current, X
         beq    @arpeggio.0
         
@@ -736,72 +753,98 @@ update_state:                                 ; [todo] find a better name
         sta    dmf.fx.arp.current, X
 @no_arpeggio:
 
+    ; As the PSG control register is updated every frame, we can
+    ; "waste" some cycle rebuilding it every time.
+    lda    dmf.player.volume, X
+    clc
+    adc    dmf.player.volume.offset, X
+    bpl    @vol.plus
+        cla
+    bra    @set_volume
+@vol.plus:
+    cmp    #$7c
+    bcc    @set_volume
+        lda    #$7c
+@set_volume:
+    sta    <dmf.player.ch
+
     ; -- instrument volume
     lda    dmf.instrument.flag, X
     bit    #INST_VOL 
-    beq    @std_volume
-        ldy    dmf.instrument.vol.index, X
+    beq    @no_volume
+        ldy    dmf.instrument.vol.index, X                  ; fetch envelope value
         lda    dmf.instrument.vol.lo, X
         sta    <dmf.player.si
         lda    dmf.instrument.vol.hi, X
         sta    <dmf.player.si+1
         lda    [dmf.player.si], Y
         inc    A
-        ldy    dmf.player.volume.orig, X
+        ldy    <dmf.player.ch                               ; compute envelope * volume
         phx
         jsr    mul8
         asl    A
-; [todo]        sta    <_volume
+        sta    <dmf.player.ch
         plx
-        sta    dmf.player.volume, X
 
-        inc    dmf.instrument.vol.index, X
+        inc    dmf.instrument.vol.index, X                  ; increment index
         lda    dmf.instrument.vol.index, X
         cmp    dmf.instrument.vol.size, X
-        bcc    @no_volume.reset
+        bcc    @no_volume
             lda    dmf.instrument.vol.loop, X
             cmp    #$ff
-            bne    @volume.reset
+            bne    @volume.reset                            ; and reset it to its loop position if needed
                 lda    dmf.instrument.flag, X
                 and    #~INST_VOL
                 sta    dmf.instrument.flag, X
                 cla
 @volume.reset:
             sta    dmf.instrument.vol.index, X
-@no_volume.reset:
-; [todo]        smb1   <player.al
-        bra    @no_volume
-@std_volume:
-; [todo]    bbr1   <player.al, @no_volume
-        lda    dmf.player.volume, X
-; [todo]        sta    <_volume
 @no_volume:
 
     ; -- fx volume slide
-; [todo]    bbr3   <player.al, @no_volume_slide
-; [todo]        smb1   <player.al
-; [todo]        lda    player.volume, X
-; [todo]        clc
-; [todo]        adc    player.volume.delta, X
-; [todo]        bpl    @vol.plus
-; [todo]            cla
-; [todo]            rmb3   <player.al
-; [todo]            bra    @set_volume
-; [todo]@vol.plus:
-; [todo]        cmp    #$7c
-; [todo]        bcc    @set_volume
-; [todo]            lda    #$7c
-; [todo]            rmb3   <player.al
-; [todo]@set_volume:
-; [todo]        sta    player.volume, X
-; [todo]@no_volume_slide:
+    lda    dmf.player.volume.delta, X
+    beq    @no_volume_slide
+        clc
+        adc    dmf.player.volume.offset, X
+        sta    dmf.player.volume.offset, X
+@no_volume_slide:
 
     ; [todo]    8. portamento
     ; [todo]    9. vibrato
-    ; [todo]    A. set frequency  
 
-    ; [todo] regroup volume / note / frequency updates
+    ; rebuild PSG control register
+    lda    <dmf.player.psg.ctrl, X
+    and    #%11_0_00000
+    sta    <dmf.player.psg.ctrl, X
     
+    lda    <dmf.player.ch
+    beq    @skip
+        lsr    A
+        lsr    A
+@skip:
+    ora    <dmf.player.psg.ctrl, X
+    sta    <dmf.player.psg.ctrl, X
+
+    bbr4   <dmf.player.al, @no_freq_update
+        bbs0   <dmf.player.al, @noise_update 
+            ldy    <dmf.player.cl
+            lda    freq_table.lo, Y
+            ;                                                   [todo] add freq delta
+            sta    <dmf.player.psg.freq.lo, X
+            lda    freq_table.hi, Y
+            ;                                                   [todo] add freq delta
+            sta    <dmf.player.psg.freq.hi, X 
+
+            bra    @no_freq_update
+@noise_update:
+            ldy    <dmf.player.cl
+            lda    noise_table, Y
+            sta    <dmf.player.psg.freq.lo, X
+@no_freq_update:
+
+    lda    <dmf.player.al
+    sta    <dmf.player.chn.flag, X
+
     rts
 
 
@@ -1016,7 +1059,11 @@ dmf.vibrato_vol_slide:
 dmf.tremolo:
 dmf.panning:
 dmf.set_speed_value1:
-dmf.volume_slide:
+    lda    [dmf.player.ptr], Y
+    iny
+    rts
+
+;dmf.volume_slide:
 dmf.position_jump:
 dmf.retrig:
 dmf.pattern_break:
@@ -1032,12 +1079,25 @@ dmf.sync_signal:
 dmf.fine_tune:
 ;dmf.global_fine_tune:
 dmf.set_sample_bank:
-dmf.set_volume:
+;dmf.set_volume:
 ;dmf.set_instrument:
 ;dmf.note_on:
 dmf.set_samples:
     lda    [dmf.player.ptr], Y
     iny
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.set_volume:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+
+    sta    dmf.player.volume, X
+
+    stz    dmf.player.volume.offset, X
+
     rts
 
 ;;------------------------------------------------------------------------------------------
@@ -1050,10 +1110,15 @@ dmf.global_fine_tune:
     clc
     adc    <dmf.player.detune
     sta    <dmf.player.detune
+
+    lda    dmf.player.chn.flag, X
+    ora    #FRQ_UPDATE
+    sta    dmf.player.chn.flag, X
+
     rts
 
 ;;------------------------------------------------------------------------------------------
-dmf.note_delay:
+dmf.note_delay:             ; [todo] rework
     lda    <dmf.player.pattern.pos
     and    #$01
     tax
@@ -1081,7 +1146,17 @@ dmf.note_delay:
 
 ;;------------------------------------------------------------------------------------------
 dmf.note_off:
-    ; [todo] reset flags
+    ldx    <dmf.player.chn
+    stz    dmf.fx.arp.data, X
+    ; [todo] reset vibrato
+    stz    dmf.instrument.flag, X
+    ; [todo] reset frequency delta
+    stz    dmf.player.chn.flag, X
+    
+    lda    <dmf.player.psg.ctrl, X
+    and    #%00_0_11111
+    sta    <dmf.player.psg.ctrl, X
+
     rts
 
 ;;------------------------------------------------------------------------------------------
@@ -1097,9 +1172,14 @@ dmf.note_on:
     lda    <dmf.player.chn.flag, X
     bmi    @pcm_reset
 
-    ; [todo] flag to trigger note update    
-    ; [todo] reinit volume
-    ; [todo] tring note/freq update
+    lda    <dmf.player.chn.flag, X
+    ora    #FRQ_UPDATE
+    sta    <dmf.player.chn.flag, X
+
+    lda    <dmf.player.psg.ctrl, X
+    and    #%00_0_11111
+    ora    #%10_0_00000
+    sta    <dmf.player.psg.ctrl, X
 
     ; reset instrument indices
     stz    dmf.instrument.vol.index, X
@@ -1116,7 +1196,7 @@ dmf.set_wav:
 
     lda    [dmf.player.ptr], Y
     iny
-dmf.set_wav.ex:
+
     cmp    dmf.player.wav.id, X
     beq    @skip
         sta    dmf.player.wav.id, X
@@ -1126,7 +1206,7 @@ dmf.set_wav.ex:
         rts
 @skip:
     lda    <dmf.player.chn.flag, X
-    and    #WAV_UPDATE
+    and    #~WAV_UPDATE
     sta    <dmf.player.chn.flag, X
     rts
 
@@ -1135,17 +1215,21 @@ dmf.enable_noise_channel:
     ldx    <dmf.player.chn
 
     lda    [dmf.player.ptr], Y
-    iny
+    beq    @disable_noise_channel
+        lda    <dmf.player.chn.flag, X
+        ora    #NOI_UPDATE
+        sta    <dmf.player.chn.flag, X
 
-    and    #(~NOI_UPDATE)
-    ora    <dmf.player.chn.flag, X
-    sta    <dmf.player.chn.flag, X
-    beq    @enable_noise_channel.end
-        lda    <dmf.player.note, X
-        ora    #$80
-        sta    <dmf.player.note, X
-@enable_noise_channel.end:
-    rts
+        iny
+        rts
+
+@disable_noise_channel:
+        lda    <dmf.player.chn.flag, X
+        and    #(~NOI_UPDATE)
+        sta    <dmf.player.chn.flag, X
+        
+        iny
+        rts
 
 ;;------------------------------------------------------------------------------------------
 dmf.set_instrument:
@@ -1324,6 +1408,14 @@ dmf.arpeggio:
     lda    dmf.fx.arp.speed, X
     sta    dmf.fx.arp.tick, X
     stz    dmf.fx.arp.current, X
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.volume_slide:
+    ldx    <dmf.player.chn
+    lda    [dmf.player.ptr], Y
+    sta    dmf.player.volume.delta, X
+    iny
     rts
 
 ;;------------------------------------------------------------------------------------------
