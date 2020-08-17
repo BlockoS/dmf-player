@@ -238,35 +238,35 @@ dmf_commit:
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
 
-;    clx
-;    stx    psg_ch                                 ; update PSG control register
-;    lda    <dmf.player.psg.ctrl+0
-;    sta    psg_ctrl
+    clx
+    stx    psg_ch                                 ; update PSG control register
+    lda    <dmf.player.psg.ctrl+0
+    sta    psg_ctrl
 
-;    ldx    #$01
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+1
-;    sta    psg_ctrl
+    ldx    #$01
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+1
+    sta    psg_ctrl
 
-;    ldx    #$02
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+2
-;    sta    psg_ctrl
+    ldx    #$02
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+2
+    sta    psg_ctrl
 
-;    ldx    #$03
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+3
-;    sta    psg_ctrl
+    ldx    #$03
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+3
+    sta    psg_ctrl
 
     ldx    #$04
     stx    psg_ch
     lda    <dmf.player.psg.ctrl+4
     sta    psg_ctrl
 
-;    ldx    #$05
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+5
-;    sta    psg_ctrl
+    ldx    #$05
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+5
+    sta    psg_ctrl
 
   .macro dmf.update_psg
 @ch\1:    
@@ -303,24 +303,24 @@ dmf_commit:
 @next\1:
   .endm
 
-;    clx
-;    stx    psg_ch
-;    dmf.update_psg 0
-;    ldx    #$01
-;    stx    psg_ch
-;    dmf.update_psg 1
-;    ldx    #$02
-;    stx    psg_ch
-;    dmf.update_psg 2
-;    ldx    #$03
-;    stx    psg_ch
-;    dmf.update_psg 3
+    clx
+    stx    psg_ch
+    dmf.update_psg 0
+    ldx    #$01
+    stx    psg_ch
+    dmf.update_psg 1
+    ldx    #$02
+    stx    psg_ch
+    dmf.update_psg 2
+    ldx    #$03
+    stx    psg_ch
+    dmf.update_psg 3
     ldx    #$04
     stx    psg_ch
     dmf.update_psg 4
-;    ldx    #$05
-;    stx    psg_ch
-;    dmf.update_psg 5
+    ldx    #$05
+    stx    psg_ch
+    dmf.update_psg 5
 
     pla
     tam    #DMF_HEADER_MPR
@@ -631,18 +631,18 @@ dmf_update:
 
     jsr    update_song
     
-;    clx
-;    jsr    update_state
-;    ldx    #$01
-;    jsr    update_state
-;    ldx    #$02
-;    jsr    update_state
-;    ldx    #$03
-;    jsr    update_state
+    clx
+    jsr    update_state
+    ldx    #$01
+    jsr    update_state
+    ldx    #$02
+    jsr    update_state
+    ldx    #$03
+    jsr    update_state
     ldx    #$04
     jsr    update_state
-;    ldx    #$05
-;    jsr    update_state
+    ldx    #$05
+    jsr    update_state
 
     pla
     tam    #DMF_DATA_MPR
