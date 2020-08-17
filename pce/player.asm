@@ -293,13 +293,12 @@ dmf_commit:
             bra    @next\1
 @no_noise\1:
             stz    psg_noise
-.else
+.endif
         lda    <dmf.player.psg.freq.lo+\1
         sta    psg_freq.lo
         lda    <dmf.player.psg.freq.hi+\1
         sta    psg_freq.hi
         rmb4   <dmf.player.chn.flag+\1
-.endif
 @next\1:
   .endm
 
