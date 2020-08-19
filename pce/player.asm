@@ -1,12 +1,11 @@
-; Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors. All rights reserved.
+; Copyright (c) 2015-2020, Vincent "MooZ" Cruz and other contributors. All rights reserved.
 ; Copyrights licensed under the New BSD License. 
 ; See the accompanying LICENSE file for terms.
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-; dmf.portamento_up
-; dmf.portamento_down
 ; dmf.portamento_to_note
+; pcm replay
 
 ;;------------------------------------------------------------------------------------------
 
@@ -72,7 +71,7 @@ FX_PRT_UP        = %0000_0001
 FX_PRT_DOWN      = %0000_0010
 FX_PRT_NOTE_UP   = %0000_0100
 FX_PRT_NOTE_DOWN = %0000_1000
-
+FX_NOTE          = %1000_0000
 
 ;;------------------------------------------------------------------------------------------
     .zp
@@ -873,30 +872,30 @@ update_state:                                 ; [todo] find a better name
 @portamento.2:
         bit    #FX_PRT_NOTE_UP
         beq    @portamento.3
-;            clc                                            ; portamento to note (up)
-;            lda    player.frequency.delta.lo, X
-;            adc    player.frequency.speed, X 
-;            sta    player.frequency.delta.lo, X
-;            lda    player.frequency.delta.hi, X
-;            adc    #$00
-;            sta    player.frequency.delta.hi, X
-;            bmi    @no_portamento
-;                stz    player.frequency.delta.lo, X
-;                stz    player.frequency.delta.hi, X
-;                rmb2   <player.ah
+            clc                                            ; portamento to note (up)
+            lda    dmf.player.freq.delta.lo, X
+            adc    dmf.fx.prt.speed, X 
+            sta    dmf.player.freq.delta.lo, X
+            lda    dmf.player.freq.delta.hi, X
+            adc    #$00
+            sta    dmf.player.freq.delta.hi, X
+            bmi    @no_portamento
+                stz    dmf.player.freq.delta.lo, X
+                stz    dmf.player.freq.delta.hi, X
+                rmb4   <dmf.player.al
             bra    @no_portamento
 @portamento.3:
-;            sec                                            ; portamento to note (down)
-;            lda    player.frequency.delta.lo, X
-;            sbc    player.frequency.speed, X 
-;            sta    player.frequency.delta.lo, X
-;            lda    player.frequency.delta.hi, X
-;            sbc    #$00
-;            sta    player.frequency.delta.hi, X
-;            bpl    @no_portamento
-;                stz    player.frequency.delta.lo, X
-;                stz    player.frequency.delta.hi, X
-;                rmb2   <player.ah
+            sec                                            ; portamento to note (down)
+            lda    dmf.player.freq.delta.lo, X
+            sbc    dmf.fx.prt.speed, X 
+            sta    dmf.player.freq.delta.lo, X
+            lda    dmf.player.freq.delta.hi, X
+            sbc    #$00
+            sta    dmf.player.freq.delta.hi, X
+            bpl    @no_portamento
+                stz    dmf.player.freq.delta.lo, X
+                stz    dmf.player.freq.delta.hi, X
+                rmb4   <dmf.player.al
 @no_portamento:
     lda    dmf.player.freq.delta.lo, X
     sta    <dmf.player.dl
@@ -942,6 +941,10 @@ update_state:                                 ; [todo] find a better name
 
     lda    <dmf.player.al
     sta    <dmf.player.chn.flag, X
+
+    lda    dmf.fx.flag, X
+    and    #~FX_NOTE
+    sta    dmf.fx.flag, X
 
     rts
 
@@ -1276,10 +1279,6 @@ dmf.vibrato_vol_slide:
 dmf.tremolo:
 dmf.panning:
 dmf.set_speed_value1:
-    lda    [dmf.player.ptr], Y
-    iny
-    rts
-
 ;dmf.volume_slide:
 dmf.position_jump:
 dmf.retrig:
@@ -1394,6 +1393,10 @@ dmf.note_on:
     lda    <dmf.player.chn.flag, X
     ora    #FRQ_UPDATE
     sta    <dmf.player.chn.flag, X
+
+    lda    dmf.fx.flag, X
+    ora    #FX_NOTE
+    sta    dmf.fx.flag, X
 
     lda    <dmf.player.psg.ctrl, X
     and    #%00_0_11111
@@ -1705,77 +1708,68 @@ dmf.portamento_to_note:
     ldx    <dmf.player.chn
 
     lda    [dmf.player.ptr], Y
+    sta    dmf.fx.prt.speed, X
+    beq    @portamento_to_note.skip
+        ; check if we had a new note was triggered
+        lda    dmf.fx.flag, X
+        bpl    @portamento_to_note.skip
+            iny
+
+            lda    dmf.player.note.previous, X
+            cmp    dmf.player.note, X
+            beq    @portamento_to_note.skip
+            phy
+            pha
+
+            lda    dmf.player.psg.freq.lo, X
+            sta    <dmf.player.al
+            lda    dmf.player.psg.freq.hi, X
+            sta    <dmf.player.ah
+            ora    <dmf.player.al
+            bne    @portamento_to_note.compute
+                ldy    dmf.player.note.previous, X
+                lda    freq_table.lo, Y
+                sta    <dmf.player.al
+                lda    freq_table.hi, Y
+                sta    <dmf.player.ah
+@portamento_to_note.compute:
+            ldy    dmf.player.note, X
+            sec
+            lda    <dmf.player.al
+            sbc    freq_table.lo, Y
+            sta    dmf.player.freq.delta.lo, X
+            lda    <dmf.player.ah
+            sbc    freq_table.hi, Y
+            sta    dmf.player.freq.delta.hi, X
+
+            pla 
+            cmp    dmf.player.note, X
+            bcc    @portamento_to_note.up
+@portamento_to_note.down:
+                lda    dmf.fx.flag, X
+                and    #~(FX_PRT_NOTE_UP|FX_PRT_NOTE_DOWN)
+                ora    #FX_PRT_NOTE_DOWN
+                sta    dmf.fx.flag, X
+
+                ply
+                rts
+@portamento_to_note.up:
+                lda    dmf.fx.flag, X
+                and    #~(FX_PRT_NOTE_UP|FX_PRT_NOTE_DOWN)
+                ora    #FX_PRT_NOTE_UP
+                sta    dmf.fx.flag, X
+
+                ply
+                rts 
+@portamento_to_note.skip:
+    lda    dmf.fx.flag, X
+    and    #~(FX_PRT_NOTE_UP|FX_PRT_NOTE_DOWN)
+    sta    dmf.fx.flag, X
+
+    stz    dmf.player.freq.delta.lo, X
+    stz    dmf.player.freq.delta.hi, X
+
     iny
-; [todo]
-
-;    ldx    <player.chn
-;    lda    [player.ptr], Y
-;    sta    player.frequency.speed, X 
-;    beq    @portamento_to_note.skip
-;        ; check if we had a new note was triggered
-;        lda    <player.chn_flag, X
-;        bit    #%0000_0100
-;        beq    @portamento_to_note.skip
-;            iny
-;
-;            lda    player.note.previous, X
-;            cmp    player.note, X
-;            beq    @portamento_to_note.skip
-;
-;            phy
-;            pha
-;            
-;            lda    player.frequency.lo, X
-;            sta    <player.al
-;            lda    player.frequency.hi, X
-;            sta    <player.ah
-;            ora    <player.al
-;            bne    @portamento_to_note.compute
-;                ldy    player.note.previous, X
-;                lda    freq_table.lo, Y
-;                sta    <player.al
-;                lda    freq_table.hi, Y
-;                sta    <player.ah
-;@portamento_to_note.compute:
-;            ldy    player.note, X
-;            sec
-;            lda    <player.al
-;            sbc    freq_table.lo, Y
-;            sta    player.frequency.delta.lo, X
-;            lda    <player.ah
-;            sbc    freq_table.hi, Y
-;            sta    player.frequency.delta.hi, X
-;
-;            pla 
-;            cmp    player.note, X
-;            bcc    @portamento_to_note.up
-;@portamento_to_note.down:
-;                lda    player.frequency.flag, X
-;                and    #%1111_0011
-;                ora    #%0000_0100
-;                sta    player.frequency.flag, X
-;            
-;                ply
-;                rts
-;@portamento_to_note.up:
-;                lda    player.frequency.flag, X
-;                and    #%1111_0011
-;                ora    #%0000_1000
-;                sta    player.frequency.flag, X
-;                
-;                ply
-;                rts 
-;@portamento_to_note.skip:
-;    stz    player.frequency.delta.lo, X
-;    stz    player.frequency.delta.hi, X
-;    
-;    lda    player.frequency.flag, X
-;    and    #%1111_0011
-;    sta    player.frequency.flag, X
-;    
-;    iny
-;    rts
-
     rts
 
 ;;------------------------------------------------------------------------------------------
