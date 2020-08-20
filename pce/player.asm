@@ -845,23 +845,12 @@ update_state:                                 ; [todo] find a better name
 
     ; -- fx portamento
     lda    dmf.fx.flag, X
+    sta    <dmf.player.ah
     bit    #(FX_PRT_DOWN | FX_PRT_UP | FX_PRT_NOTE_UP | FX_PRT_NOTE_DOWN)
     beq    @no_portamento
         smb4   <dmf.player.al                               ; we'll need to update frequency
-        bit    #FX_PRT_UP
-        beq    @portamento.1
-            clc                                             ; portamento up
-            lda    dmf.player.freq.delta.lo, X
-            adc    dmf.fx.prt.speed, X 
-            sta    dmf.player.freq.delta.lo, X
-            lda    dmf.player.freq.delta.hi, X
-            adc    #$00
-            sta    dmf.player.freq.delta.hi, X
-            bra    @no_portamento
-@portamento.1:
-        bit    #FX_PRT_DOWN
-        beq    @portamento.2
-            sec                                             ; portamento down
+        bbr0    <dmf.player.ah, @portamento.1
+            sec                                             ; portamento up
             lda    dmf.player.freq.delta.lo, X
             sbc    dmf.fx.prt.speed, X 
             sta    dmf.player.freq.delta.lo, X
@@ -869,23 +858,19 @@ update_state:                                 ; [todo] find a better name
             sbc    #$00
             sta    dmf.player.freq.delta.hi, X
             bra    @no_portamento
-@portamento.2:
-        bit    #FX_PRT_NOTE_UP
-        beq    @portamento.3
-            clc                                            ; portamento to note (up)
+@portamento.1:
+        bbr1    <dmf.player.ah, @portamento.2
+            clc                                             ; portamento down
             lda    dmf.player.freq.delta.lo, X
             adc    dmf.fx.prt.speed, X 
             sta    dmf.player.freq.delta.lo, X
             lda    dmf.player.freq.delta.hi, X
             adc    #$00
             sta    dmf.player.freq.delta.hi, X
-            bmi    @no_portamento
-                stz    dmf.player.freq.delta.lo, X
-                stz    dmf.player.freq.delta.hi, X
-                rmb4   <dmf.player.al
             bra    @no_portamento
-@portamento.3:
-            sec                                            ; portamento to note (down)
+@portamento.2:
+        bbr2    <dmf.player.ah, @portamento.3
+            sec                                            ; portamento to note (up)
             lda    dmf.player.freq.delta.lo, X
             sbc    dmf.fx.prt.speed, X 
             sta    dmf.player.freq.delta.lo, X
@@ -895,8 +880,24 @@ update_state:                                 ; [todo] find a better name
             bpl    @no_portamento
                 stz    dmf.player.freq.delta.lo, X
                 stz    dmf.player.freq.delta.hi, X
-                rmb4   <dmf.player.al
+                rmb2   <dmf.player.ah
+            bra    @no_portamento
+@portamento.3:
+            clc                                            ; portamento to note (down)
+            lda    dmf.player.freq.delta.lo, X
+            adc    dmf.fx.prt.speed, X 
+            sta    dmf.player.freq.delta.lo, X
+            lda    dmf.player.freq.delta.hi, X
+            adc    #$00
+            sta    dmf.player.freq.delta.hi, X
+            bmi    @no_portamento
+                stz    dmf.player.freq.delta.lo, X
+                stz    dmf.player.freq.delta.hi, X
+                rmb3   <dmf.player.ah
 @no_portamento:
+    lda    <dmf.player.ah
+    sta    dmf.fx.flag, X
+
     lda    dmf.player.freq.delta.lo, X
     sta    <dmf.player.dl
     lda    dmf.player.freq.delta.hi, X
@@ -1364,11 +1365,12 @@ dmf.note_delay:             ; [todo] rework
 ;;------------------------------------------------------------------------------------------
 dmf.note_off:
     ldx    <dmf.player.chn
+    stz    dmf.fx.flag, X
     stz    dmf.fx.arp.data, X
     stz    dmf.fx.vib.data, X
     stz    dmf.instrument.flag, X
-    stz    dmf.player.freq.delta.lo
-    stz    dmf.player.freq.delta.hi
+    stz    dmf.player.freq.delta.lo, X
+    stz    dmf.player.freq.delta.hi, X
     stz    dmf.player.chn.flag, X
     
     lda    <dmf.player.psg.ctrl, X
@@ -1397,14 +1399,16 @@ dmf.note_on:
     lda    dmf.fx.flag, X
     ora    #FX_NOTE
     sta    dmf.fx.flag, X
+    bit    #(FX_PRT_NOTE_UP | FX_PRT_NOTE_DOWN)
+    beq    @end
+        stz    dmf.player.freq.delta.lo, X
+        stz    dmf.player.freq.delta.hi, X
+@end:
 
     lda    <dmf.player.psg.ctrl, X
     and    #%00_0_11111
     ora    #%10_0_00000
     sta    <dmf.player.psg.ctrl, X
-
-    stz    dmf.player.freq.delta.lo
-    stz    dmf.player.freq.delta.hi
 
     stz    dmf.instrument.vol.index, X
     stz    dmf.instrument.arp.index, X
@@ -1713,11 +1717,10 @@ dmf.portamento_to_note:
         ; check if we had a new note was triggered
         lda    dmf.fx.flag, X
         bpl    @portamento_to_note.skip
-            iny
-
             lda    dmf.player.note.previous, X
             cmp    dmf.player.note, X
             beq    @portamento_to_note.skip
+            iny
             phy
             pha
 
