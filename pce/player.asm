@@ -4,7 +4,10 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-; dmf.portamento_to_note
+; defines to activate/deactivate channels
+; debug vibrato
+; dmf.panning
+; debug chan 2 paraplex
 ; pcm replay
 
 ;;------------------------------------------------------------------------------------------
@@ -71,6 +74,7 @@ FX_PRT_UP        = %0000_0001
 FX_PRT_DOWN      = %0000_0010
 FX_PRT_NOTE_UP   = %0000_0100
 FX_PRT_NOTE_DOWN = %0000_1000
+FX_VIBRATO       = %0001_0000
 FX_NOTE          = %1000_0000
 
 ;;------------------------------------------------------------------------------------------
@@ -248,35 +252,35 @@ dmf_commit:
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
 
-    clx
-    stx    psg_ch                                 ; update PSG control register
-    lda    <dmf.player.psg.ctrl+0
-    sta    psg_ctrl
+;    clx
+;    stx    psg_ch                                 ; update PSG control register
+;    lda    <dmf.player.psg.ctrl+0
+;    sta    psg_ctrl
 
-    ldx    #$01
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+1
-    sta    psg_ctrl
+;    ldx    #$01
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+1
+;    sta    psg_ctrl
 
-    ldx    #$02
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+2
-    sta    psg_ctrl
+;    ldx    #$02
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+2
+;    sta    psg_ctrl
 
     ldx    #$03
     stx    psg_ch
     lda    <dmf.player.psg.ctrl+3
     sta    psg_ctrl
 
-    ldx    #$04
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+4
-    sta    psg_ctrl
+;    ldx    #$04
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+4
+;    sta    psg_ctrl
 
-    ldx    #$05
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+5
-    sta    psg_ctrl
+;    ldx    #$05
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+5
+;    sta    psg_ctrl
 
   .macro dmf.update_psg
 @ch\1:    
@@ -312,24 +316,24 @@ dmf_commit:
 @next\1:
   .endm
 
-    clx
-    stx    psg_ch
-    dmf.update_psg 0
-    ldx    #$01
-    stx    psg_ch
-    dmf.update_psg 1
-    ldx    #$02
-    stx    psg_ch
-    dmf.update_psg 2
+;    clx
+;    stx    psg_ch
+;    dmf.update_psg 0
+;    ldx    #$01
+;    stx    psg_ch
+;    dmf.update_psg 1
+;    ldx    #$02
+;    stx    psg_ch
+;    dmf.update_psg 2
     ldx    #$03
     stx    psg_ch
     dmf.update_psg 3
-    ldx    #$04
-    stx    psg_ch
-    dmf.update_psg 4
-    ldx    #$05
-    stx    psg_ch
-    dmf.update_psg 5
+;    ldx    #$04
+;    stx    psg_ch
+;    dmf.update_psg 4
+;    ldx    #$05
+;    stx    psg_ch
+;    dmf.update_psg 5
 
     pla
     tam    #DMF_HEADER_MPR
@@ -646,18 +650,18 @@ dmf_update:
 
     jsr    update_song
     
-    clx
-    jsr    update_state
-    ldx    #$01
-    jsr    update_state
-    ldx    #$02
-    jsr    update_state
+;    clx
+;    jsr    update_state
+;    ldx    #$01
+;    jsr    update_state
+;    ldx    #$02
+;    jsr    update_state
     ldx    #$03
     jsr    update_state
-    ldx    #$04
-    jsr    update_state
-    ldx    #$05
-    jsr    update_state
+;    ldx    #$04
+;    jsr    update_state
+;    ldx    #$05
+;    jsr    update_state
 
     pla
     tam    #DMF_DATA_MPR
@@ -667,6 +671,8 @@ dmf_update:
     rts
 
 update_state:                                 ; [todo] find a better name
+    stx    <dmf.player.chn
+
     lda    <dmf.player.chn.flag, X
     sta    <dmf.player.al
 
@@ -904,8 +910,7 @@ update_state:                                 ; [todo] find a better name
     sta    <dmf.player.dh
 
     ; -- vibrato
-    lda    dmf.fx.vib.data, X
-    beq    @no_vibrato
+    bbr4    <dmf.player.ah, @no_vibrato
         jsr    dmf.update_vibrato
 @no_vibrato:
 
@@ -1278,7 +1283,6 @@ dmf.vibrato_depth:
 dmf.port_to_note_vol_slide:
 dmf.vibrato_vol_slide:
 dmf.tremolo:
-dmf.panning:
 dmf.set_speed_value1:
 ;dmf.volume_slide:
 dmf.position_jump:
@@ -1651,11 +1655,24 @@ dmf.volume_slide:
 dmf.vibrato: 
     ldx    <dmf.player.chn
 
-    lda    [dmf.player.ptr], Y
-    iny
-    sta    dmf.fx.vib.data, X
     stz    dmf.fx.vib.tick, X
-    rts
+
+    lda    [dmf.player.ptr], Y
+    sta    dmf.fx.vib.data, X
+    beq    @none
+        lda    dmf.fx.flag, X
+        ora    #FX_VIBRATO
+        sta    dmf.fx.flag, X
+    
+        iny
+        rts
+@none:
+        lda    dmf.fx.flag, X
+        and    #~FX_VIBRATO
+        sta    dmf.fx.flag, X
+
+        iny
+        rts
 
 ;;------------------------------------------------------------------------------------------
 dmf.portamento_up:
@@ -1773,6 +1790,21 @@ dmf.portamento_to_note:
     stz    dmf.player.freq.delta.hi, X
 
     iny
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.panning:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    iny
+    sta    <dmf.player.psg.pan, X
+
+
+    lda    <dmf.player.chn.flag, X 
+    ora    #PAN_UPDATE
+    sta    <dmf.player.chn.flag, X
+
     rts
 
 ;;------------------------------------------------------------------------------------------
