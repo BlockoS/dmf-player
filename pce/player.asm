@@ -4,7 +4,9 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-; defines to activate/deactivate channels
+; pattern_break
+; position_jump
+; fine_tune
 ; pcm replay
 
 ;;------------------------------------------------------------------------------------------
@@ -668,6 +670,12 @@ dmf_update:
     rts
 
 update_state:                                 ; [todo] find a better name
+    lda    <dmf.player.delay, X
+    beq    @run
+        dec    <dmf.player.delay, X
+        rts
+@run:
+
     stx    <dmf.player.chn
 
     lda    <dmf.player.chn.flag, X
@@ -1362,7 +1370,7 @@ dmf.global_fine_tune:
     rts
 
 ;;------------------------------------------------------------------------------------------
-dmf.note_delay:             ; [todo] rework
+dmf.note_delay:
     lda    <dmf.player.pattern.pos
     and    #$01
     tax
@@ -1373,14 +1381,7 @@ dmf.note_delay:             ; [todo] rework
     cmp    dmf.player.tick, X
     bcs    @note_delay.reset
 @note_delay.set:
-        ldx    <dmf.player.chn
-
-        ; [todo] trigger note update
-
-        lda    dmf.player.chn.flag, X
-        and    #~FRQ_UPDATE
-        sta    dmf.player.chn.flag, X
-        
+        ldx    <dmf.player.chn        
         sta    <dmf.player.delay, X
         rts
 @note_delay.reset:
