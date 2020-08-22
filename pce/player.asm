@@ -5,9 +5,6 @@
 
 ; [todo]
 ; defines to activate/deactivate channels
-; debug vibrato
-; dmf.panning
-; debug chan 2 paraplex
 ; pcm replay
 
 ;;------------------------------------------------------------------------------------------
@@ -252,35 +249,35 @@ dmf_commit:
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
 
-;    clx
-;    stx    psg_ch                                 ; update PSG control register
-;    lda    <dmf.player.psg.ctrl+0
-;    sta    psg_ctrl
+    clx
+    stx    psg_ch                                 ; update PSG control register
+    lda    <dmf.player.psg.ctrl+0
+    sta    psg_ctrl
 
-;    ldx    #$01
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+1
-;    sta    psg_ctrl
+    ldx    #$01
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+1
+    sta    psg_ctrl
 
-;    ldx    #$02
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+2
-;    sta    psg_ctrl
+    ldx    #$02
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+2
+    sta    psg_ctrl
 
     ldx    #$03
     stx    psg_ch
     lda    <dmf.player.psg.ctrl+3
     sta    psg_ctrl
 
-;    ldx    #$04
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+4
-;    sta    psg_ctrl
+    ldx    #$04
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+4
+    sta    psg_ctrl
 
-;    ldx    #$05
-;    stx    psg_ch
-;    lda    <dmf.player.psg.ctrl+5
-;    sta    psg_ctrl
+    ldx    #$05
+    stx    psg_ch
+    lda    <dmf.player.psg.ctrl+5
+    sta    psg_ctrl
 
   .macro dmf.update_psg
 @ch\1:    
@@ -316,24 +313,24 @@ dmf_commit:
 @next\1:
   .endm
 
-;    clx
-;    stx    psg_ch
-;    dmf.update_psg 0
-;    ldx    #$01
-;    stx    psg_ch
-;    dmf.update_psg 1
-;    ldx    #$02
-;    stx    psg_ch
-;    dmf.update_psg 2
+    clx
+    stx    psg_ch
+    dmf.update_psg 0
+    ldx    #$01
+    stx    psg_ch
+    dmf.update_psg 1
+    ldx    #$02
+    stx    psg_ch
+    dmf.update_psg 2
     ldx    #$03
     stx    psg_ch
     dmf.update_psg 3
-;    ldx    #$04
-;    stx    psg_ch
-;    dmf.update_psg 4
-;    ldx    #$05
-;    stx    psg_ch
-;    dmf.update_psg 5
+    ldx    #$04
+    stx    psg_ch
+    dmf.update_psg 4
+    ldx    #$05
+    stx    psg_ch
+    dmf.update_psg 5
 
     pla
     tam    #DMF_HEADER_MPR
@@ -650,18 +647,18 @@ dmf_update:
 
     jsr    update_song
     
-;    clx
-;    jsr    update_state
-;    ldx    #$01
-;    jsr    update_state
-;    ldx    #$02
-;    jsr    update_state
+    clx
+    jsr    update_state
+    ldx    #$01
+    jsr    update_state
+    ldx    #$02
+    jsr    update_state
     ldx    #$03
     jsr    update_state
-;    ldx    #$04
-;    jsr    update_state
-;    ldx    #$05
-;    jsr    update_state
+    ldx    #$04
+    jsr    update_state
+    ldx    #$05
+    jsr    update_state
 
     pla
     tam    #DMF_DATA_MPR
@@ -677,6 +674,10 @@ update_state:                                 ; [todo] find a better name
     sta    <dmf.player.al
 
     ; -- instrument wav
+    lda    <dmf.player.chn.flag, X
+    bit    #NOI_UPDATE
+    bne    @no_wav
+      
     lda    dmf.instrument.flag, X
     bit    #INST_WAV
     beq    @no_wav
@@ -887,7 +888,7 @@ update_state:                                 ; [todo] find a better name
                 stz    dmf.player.freq.delta.lo, X
                 stz    dmf.player.freq.delta.hi, X
                 rmb2   <dmf.player.ah
-            bra    @no_portamento
+                bra    @no_portamento
 @portamento.3:
             clc                                            ; portamento to note (down)
             lda    dmf.player.freq.delta.lo, X
@@ -937,7 +938,28 @@ update_state:                                 ; [todo] find a better name
             lda    freq_table.hi, Y
             adc    <dmf.player.dh
             sta    <dmf.player.psg.freq.hi, X 
-
+            bne    @freq.check.lo
+@freq.check.hi:
+            lda    <dmf.player.psg.freq.lo, X
+            cmp    #$16
+            bcs    @no_freq_update
+                lda    #$16
+                sta    <dmf.player.psg.freq.lo, X
+                bra    @freq.delta.reset
+@freq.check.lo:
+            cmp    #$0c
+            bcc    @no_freq_update
+                lda    #$0c
+                sta    <dmf.player.psg.freq.hi, X
+                lda    #$ba
+                sta    <dmf.player.psg.freq.lo, X
+@freq.delta.reset:
+            sec
+            sbc    freq_table.lo, Y
+            sta    dmf.player.freq.delta.lo, X
+            lda    <dmf.player.psg.freq.hi, X
+            sbc    freq_table.hi, Y
+            sta    dmf.player.freq.delta.hi, X 
             bra    @no_freq_update
 @noise_update:
             ldy    <dmf.player.cl
@@ -1404,7 +1426,7 @@ dmf.note_on:
     ora    #FX_NOTE
     sta    dmf.fx.flag, X
     bit    #(FX_PRT_NOTE_UP | FX_PRT_NOTE_DOWN)
-    beq    @end
+    bne    @end
         stz    dmf.player.freq.delta.lo, X
         stz    dmf.player.freq.delta.hi, X
 @end:
