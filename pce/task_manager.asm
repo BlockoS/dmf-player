@@ -64,12 +64,12 @@ task.update:
   .macro task.irq_install
     stx    <task.dummy
     sta    <task.dummy+1
-    plx
-    lda    #high(task.update)
+    plx                             ; retrieve P register
+    lda    #high(task.update)       ; push task update routine
     pha
     lda    #low(task.update)
     pha
-    phx
+    phx                             ; push P register back
     ldx    <task.dummy
     lda    <task.dummy+1
   .endm

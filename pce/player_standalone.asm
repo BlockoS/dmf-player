@@ -116,22 +116,21 @@ irq_1:
 
     bbr2   <_vdc_status, @check_vsync
 @hsync:
-;        jsr    dmf_pcm_update
+        jsr    dmf_pcm_update
 
-;        st0    #$06
-;        lda    <player.rcr
-;        clc
-;        adc    #$40
-;        sta    video_data_l
-;        cla
-;        adc    #$00
-;        sta    video_data_h
+        st0    #$06
+        lda    <dmf.player.rcr
+        clc
+        adc    #$40
+        sta    video_data_l
+        cla
+        adc    #$00
+        sta    video_data_h
         
         bra    @end
 @check_vsync:
     bbr5   <_vdc_status, @end
 @vsync:
-    ; [todo] grab P
     task.irq_install
 
     st0    #$06

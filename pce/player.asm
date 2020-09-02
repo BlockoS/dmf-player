@@ -4,10 +4,11 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
+; pcm replay
 ; pattern_break
 ; position_jump
 ; fine_tune
-; pcm replay
+; note delay is most likely to be buggy... rework it.
 
 ;;------------------------------------------------------------------------------------------
 
@@ -108,8 +109,6 @@ dmf.player.note   .ds DMF_CHAN_COUNT            ; [todo] move to bss?
 dmf.player.volume .ds DMF_CHAN_COUNT            ; [todo] move to bss?
 dmf.player.rest   .ds DMF_CHAN_COUNT            ; [todo] move to bss?
 
-dmf.player.delay  .ds DMF_CHAN_COUNT
-
                                     ; 0: backup of header mpr
 dmf.player.mpr_backup .ds 2         ; 1: backup of data mpr
 dmf.player.chn .ds 1                ; current psg channel
@@ -128,6 +127,13 @@ dmf.player.samples.rate.hi       .ds 2 ; PCM sample rate (RCR offset MSB)
 dmf.player.samples.offset.lo     .ds 2 ; PCM samples ROM offset (LSB)
 dmf.player.samples.offset.hi     .ds 2 ; PCM samples ROM offset (MSB)
 dmf.player.samples.bank          .ds 2 ; PCM samples ROM bank
+
+
+dmf.player.rcr           .ds 1
+dmf.player.pcm.rcr       .ds PSG_CHAN_COUNT*2
+dmf.player.pcm.rcr.delta .ds PSG_CHAN_COUNT*2
+dmf.player.pcm.bank      .ds PSG_CHAN_COUNT
+dmf.player.pcm.ptr       .ds PSG_CHAN_COUNT*2
 
 dmf.zp.end:
 
@@ -155,9 +161,11 @@ dmf.player.pattern.hi   .ds DMF_CHAN_COUNT
 
 dmf.player.wav.id .ds DMF_CHAN_COUNT
 
+dmf.player.delay .ds DMF_CHAN_COUNT
+dmf.player.cut   .ds DMF_CHAN_COUNT
+
 dmf.player.note.previous .ds DMF_CHAN_COUNT
 
-; [todo] next note for delay ?
 dmf.player.volume.orig   .ds DMF_CHAN_COUNT
 dmf.player.volume.offset .ds DMF_CHAN_COUNT
 dmf.player.volume.delta  .ds DMF_CHAN_COUNT
@@ -196,6 +204,8 @@ dmf.fx.vib.data .ds PSG_CHAN_COUNT
 dmf.fx.vib.tick .ds PSG_CHAN_COUNT
 
 dmf.fx.prt.speed .ds PSG_CHAN_COUNT
+
+dmf.player.pcm.src    .ds PSG_CHAN_COUNT*2
 
 dmf.bss.end:
 
@@ -282,9 +292,12 @@ dmf_commit:
     sta    psg_ctrl
 
   .macro dmf.update_psg
-@ch\1:    
+@ch\1:
     bbr7   <dmf.player.chn.flag+\1, @wav\1
-        ; [todo] pcm
+        ; [todo] reset pointer on note_on 
+        stz    <dmf.player.pcm.rcr+(2*\1)
+        stz    <dmf.player.pcm.rcr+(1+2*\1)
+        nop
 @wav\1:
     bbr6   <dmf.player.chn.flag+\1, @pan\1
         lda    dmf.player.wav.id+\1
@@ -336,6 +349,8 @@ dmf_commit:
 
     pla
     tam    #DMF_HEADER_MPR
+
+    stz    <dmf.player.rcr
 
     rts
 
@@ -445,7 +460,7 @@ dmf_load_song:
     sta    dmf.song.name
     cla
     adc    <dmf.player.si+1
-    sta    <dmf.player.si
+    sta    <dmf.player.si+1
     sta    dmf.song.name+1
 
     ; move to the song author
@@ -454,9 +469,11 @@ dmf_load_song:
     clc
     adc    <dmf.player.si
     sta    dmf.song.author
+    sta    <dmf.player.si
     cla
     adc    <dmf.player.si+1
     sta    dmf.song.author+1
+    sta    <dmf.player.si+1
 
     ; move to samples
     lda    [dmf.player.si]          ; string length
@@ -536,6 +553,7 @@ dmf_load_song:
     stz    dmf.player.note.previous, X
     stz    dmf.player.note, X
     stz    dmf.player.delay, X
+    stz    dmf.player.cut, X
     stz    dmf.player.volume.offset, X
     stz    dmf.player.volume.delta, X
 
@@ -670,9 +688,20 @@ dmf_update:
     rts
 
 update_state:                                 ; [todo] find a better name
-    lda    <dmf.player.delay, X
+    lda    dmf.player.cut, X
+    beq    @delay
+        cmp    #$80
+        bne    @cut
+            stz    <dmf.player.psg.ctrl, X
+            stz    <dmf.player.chn.flag, X
+            rts
+@cut:
+        dec    dmf.player.cut, X
+@delay:
+
+    lda    dmf.player.delay, X
     beq    @run
-        dec    <dmf.player.delay, X
+        dec    dmf.player.delay, X
         rts
 @run:
 
@@ -1275,6 +1304,7 @@ fetch_pattern:                                      ; [todo] name
     .dw dmf.set_LFO_speed
     .dw dmf.note_slide_up
     .dw dmf.note_slide_down
+    .dw dmf.note_cut
     .dw dmf.note_delay
     .dw dmf.sync_signal
     .dw dmf.fine_tune
@@ -1325,6 +1355,7 @@ dmf.set_LFO_mode:
 dmf.set_LFO_speed:
 dmf.note_slide_up:
 dmf.note_slide_down:
+;dmf.note_cut:
 ;dmf.note_delay:
 dmf.sync_signal:
 dmf.fine_tune:
@@ -1333,7 +1364,7 @@ dmf.set_sample_bank:
 ;dmf.set_volume:
 ;dmf.set_instrument:
 ;dmf.note_on:
-dmf.set_samples:
+;dmf.set_samples:
     lda    [dmf.player.ptr], Y
     iny
     rts
@@ -1370,6 +1401,26 @@ dmf.global_fine_tune:
     rts
 
 ;;------------------------------------------------------------------------------------------
+dmf.note_cut:
+    lda    <dmf.player.pattern.pos
+    and    #$01
+    tax
+    
+    lda    [dmf.player.ptr], Y
+    iny
+
+    cmp    dmf.song.time.tick, X
+    bcs    @note_cut.reset
+@note_cut.set:
+        ldx    <dmf.player.chn        
+        sta    dmf.player.cut, X
+        rts
+@note_cut.reset:
+    ldx    <dmf.player.chn
+    stz    dmf.player.cut, X
+    rts
+
+;;------------------------------------------------------------------------------------------
 dmf.note_delay:
     lda    <dmf.player.pattern.pos
     and    #$01
@@ -1378,16 +1429,16 @@ dmf.note_delay:
     lda    [dmf.player.ptr], Y
     iny
 
-    cmp    dmf.player.tick, X
+    cmp    dmf.song.time.tick, X
     bcs    @note_delay.reset
 @note_delay.set:
         ldx    <dmf.player.chn        
-        sta    <dmf.player.delay, X
+        sta    dmf.player.delay, X
         rts
 @note_delay.reset:
-        ldx    <dmf.player.chn
-        stz    <dmf.player.delay, X
-        rts
+    ldx    <dmf.player.chn
+    stz    dmf.player.delay, X
+    rts
 
 ;;------------------------------------------------------------------------------------------
 dmf.note_off:
@@ -1432,14 +1483,15 @@ dmf.note_on:
         stz    dmf.player.freq.delta.hi, X
 @end:
 
+    stz    dmf.instrument.vol.index, X
+    stz    dmf.instrument.arp.index, X
+    stz    dmf.instrument.wav.index, X
+
     lda    <dmf.player.psg.ctrl, X
     and    #%00_0_11111
     ora    #%10_0_00000
     sta    <dmf.player.psg.ctrl, X
 
-    stz    dmf.instrument.vol.index, X
-    stz    dmf.instrument.arp.index, X
-    stz    dmf.instrument.wav.index, X
     
     rts
 @pcm_reset:
@@ -1827,6 +1879,164 @@ dmf.panning:
     lda    <dmf.player.chn.flag, X 
     ora    #PAN_UPDATE
     sta    <dmf.player.chn.flag, X
+
+    rts
+
+;;------------------------------------------------------------------------------------------
+dmf.set_samples:
+    ldx    <dmf.player.chn
+
+    lda    [dmf.player.ptr], Y
+    beq    @pcm.disable
+@pcm.enable:
+        lda    <dmf.player.chn.flag, X
+        and    #PAN_UPDATE
+        ora    #PCM_UPDATE
+        sta    <dmf.player.chn.flag, X      ; deactivate frequency effects
+
+        stz    dmf.instrument.flag, X       ; only use instrument volume
+
+        lda    dmf.fx.flag, X               ; only use volume slide and vibrato
+        and    #FX_VIBRATO
+        sta    dmf.fx.flag, X
+
+        ; enable dda
+        ; [todo] volume
+        lda    #$7f
+        sta    dmf.player.volume, X
+;        lsr    A
+;        lsr    A
+;        ora    #PSG_CTRL_DDA_ON
+        lda    #(PSG_CTRL_DDA_ON | PSG_CTRL_FULL_VOLUME)    
+        sta    <dmf.player.psg.ctrl, X
+        
+        lda    dmf.player.note, X
+        cmp    #$0C
+        bcc    @pcm.skip
+@modulo_12:
+            sec
+            sbc    #$0c
+            cmp    #$0c
+            bcs    @modulo_12
+@pcm.skip:
+
+        phy
+        tay
+
+        lda    [dmf.player.samples.bank], Y
+        sta    <dmf.player.pcm.bank, X
+
+        txa
+        asl    A
+        tax
+
+        stz    <dmf.player.pcm.rcr, X
+        stz    <dmf.player.pcm.rcr+1, X
+
+        lda    [dmf.player.samples.rate.lo], Y
+        sta    <dmf.player.pcm.rcr.delta, X
+        lda    [dmf.player.samples.rate.hi], Y
+        sta    <dmf.player.pcm.rcr.delta+1, X
+        lda    [dmf.player.samples.offset.lo], Y
+        sta    dmf.player.pcm.src, X
+        sta    <dmf.player.pcm.ptr, X
+        lda    [dmf.player.samples.offset.hi], Y
+        sta    dmf.player.pcm.src+1, X
+        sta    <dmf.player.pcm.ptr+1, X
+        ; [todo] put to bss
+
+        ply
+
+        iny
+        rts
+
+@pcm.disable:
+    lda    <dmf.player.chn.flag, X
+    and    #$7f
+    sta    <dmf.player.chn.flag, X
+    
+    txa
+    asl    A
+    tax
+
+    lda    #$ff
+    sta    <dmf.player.pcm.rcr, X
+
+    iny
+    rts
+
+;;------------------------------------------------------------------------------------------
+   .macro dmf_pcm_start
+    stz    <dmf.player.rcr
+    ; [todo]
+   .endm
+
+;;------------------------------------------------------------------------------------------
+    .macro dmf_pcm_update.ch
+@pcm.ch\1:
+    bbr7   <dmf.player.chn.flag+\1,  @pcm.ch\1.end
+
+    cpx    <dmf.player.pcm.rcr+(1+2*\1)
+    bne    @pcm.ch\1.end
+        lda    <dmf.player.pcm.bank+\1
+        tam    #DMF_DATA_MPR
+
+        lda    #\1
+        sta    psg_ch
+        
+        lda    [dmf.player.pcm.ptr+(2*\1)]
+        cmp    #$ff
+        bne    @pcm.ch\1.update
+            sta    <dmf.player.pcm.rcr+(1+2*\1)
+            bra    @pcm.ch\1.end
+@pcm.ch\1.update:
+        sta    psg_wavebuf
+
+        inc    <dmf.player.pcm.ptr+(2*\1)
+        bne    @l\1
+            inc    <dmf.player.pcm.ptr+(1+2*\1)
+            lda    <dmf.player.pcm.ptr+(1+2*\1)
+            and    #%111_00000
+            cmp    #(DMF_DATA_MPR << 5)
+            bcc    @l\1
+            beq    @l\1
+                lda    <dmf.player.pcm.ptr+(1+2*\1)
+                and    #$1f
+                ora    #(DMF_DATA_MPR << 5)
+                sta    <dmf.player.pcm.ptr+(1+2*\1)
+                inc    <dmf.player.pcm.bank+\1
+@l\1:
+        lda    <dmf.player.pcm.rcr+(2*\1)
+        clc
+        adc    <dmf.player.pcm.rcr.delta+(2*\1)
+        sta    <dmf.player.pcm.rcr+(2*\1)
+        lda    <dmf.player.pcm.rcr+(1+2*\1)
+        adc    <dmf.player.pcm.rcr.delta+(1+2*\1)
+        sta    <dmf.player.pcm.rcr+(1+2*\1)
+@pcm.ch\1.end:
+    .endm
+
+;;------------------------------------------------------------------------------------------
+dmf_pcm_update:
+    tma    #DMF_DATA_MPR
+    pha
+    
+    ldx    <dmf.player.rcr
+
+    dmf_pcm_update.ch 0
+    dmf_pcm_update.ch 1
+    dmf_pcm_update.ch 2
+    dmf_pcm_update.ch 3
+    dmf_pcm_update.ch 4
+    dmf_pcm_update.ch 5
+
+    inc    <dmf.player.rcr
+    
+    pla
+    tam    #DMF_DATA_MPR
+
+    lda    dmf.player.chn
+    sta    psg_ch
 
     rts
 

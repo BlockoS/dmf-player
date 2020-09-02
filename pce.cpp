@@ -57,7 +57,7 @@ static Effect DMF2PCE(DMF::Effect fx) {
         case DMF::SET_SAMPLES_BANK:
             return SetSampleBank;
         case DMF::NOTE_CUT:
-            return NoteOff;
+            return NoteCut;
         case DMF::NOTE_DELAY:
             return NoteDelay;
         case DMF::SYNC_SIGNAL:
@@ -219,17 +219,13 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                     if(pattern_data.effect[m].code != 0xffff) {
                         last = _matrix[i].buffer[j].size();
                         _matrix[i].buffer[j].push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
-                        // - Note cut
-                        if(pattern_data.effect[m].code == 0xEC) {
-                            continue;
-                        }
-
+                   
                         uint8_t data;
                         data = (pattern_data.effect[m].data != 0xffff) ? pattern_data.effect[m].data : 0x00;
 
                         // Preprocess / fix
                         // - Global fine tune
-                        if(pattern_data.effect[m].code == 0xEF) {
+                        if(pattern_data.effect[m].code == DMF::GLOBAL_FINE_TUNE) {
                             if(data > 0x80) {
                                 data -= 0x80;
                             }
@@ -238,7 +234,7 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                             }
                         }
                         // - Volume slide
-                        else if(pattern_data.effect[m].code == 0x0A) {
+                        else if(pattern_data.effect[m].code == DMF::VOLUME_SLIDE) {
                             if(data > 0x0f) {	
                                 // Positive delta.
                                 data >>= 4;
@@ -247,6 +243,10 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                                 // Negative delta.
                                 data = ((data & 0x0f) ^ 0xff) + 1;
                             }
+                        }
+                        // - Note cut
+                        else if(pattern_data.effect[m].code == DMF::NOTE_CUT) {
+                                data |= 0x80;
                         }
                         _matrix[i].buffer[j].push_back(data);
                     }

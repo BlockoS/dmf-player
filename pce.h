@@ -36,6 +36,7 @@ namespace PCE {
         SetLFOSpeed,
         NoteSlideUp,
         NoteslideDown,
+        NoteCut,
         NoteDelay,
         SyncSignal,
         FineTune,
