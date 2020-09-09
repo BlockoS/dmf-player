@@ -5,6 +5,8 @@
 #include <cstring>
 #include <cmath>
 
+#include <samplerate.h>
+
 #include "pce.h"
 #include "pcewriter.h"
 
@@ -271,20 +273,44 @@ void SongPacker::packSamples(DMF::Song const& song) {
     _samples.resize(song.sample.size());
     for(size_t i=0; i<song.sample.size(); i++) {
         DMF::Sample const& current = song.sample[i];
+        size_t j = (current.rate <= 5) ? (current.rate-1) : 4;
         float scale = static_cast<float>(1 << current.bits);
-        float db = 2.f*current.amp - 100.f;
-        float gain = powf(10.f, db/20.f) / scale;
-        uint8_t dj = current.pitch - 5 + 1;
+        float amplitude = pow(10.f, (2.f*current.amp/100.f - 1.f) * 96.f / 20.f);
 
-        uint32_t j = (current.rate <= 5) ? (current.rate-1) : 4;
-        _samples[i].rate = (262 * 60) * 256 / freq[j];
+        //_samples[i].rate = 1;
+        _samples[i].rate = (262 * 60) * 256 / freq[j]; // [todo] remove
+
+        int error;
+        SRC_DATA data;
+        SRC_STATE *state = src_new(SRC_SINC_BEST_QUALITY, 1, &error) ;
         
-        for(size_t j=0; j<current.data.size(); j+=dj) {
-            float v = current.data[j] * gain;
-            v = (v < 0.0) ? 0.0 : ((v > 1.0) ? 1.0 : v);
-            _samples[i].data.push_back(v * 31);
+        data.input_frames = data.output_frames = current.data.size();
+        data.input_frames_used = data.output_frames_gen = 0;
+        data.end_of_input = 0;
+        data.src_ratio = 7000.f / freq[j]; // [todo] use pitch here (< 0 : divide 1+picth, > 0 multiply 1+pitch, 0: 1)
+
+        float *dummy = new float[data.input_frames];
+        data.data_in = dummy;
+        data.data_out = new float[data.output_frames]; // [todo] pitch => change the process loop
+
+        for(j=0; j<data.input_frames; j++) {
+            float v = (2.f * (current.data[j] / scale) - 1.f) * amplitude;
+            dummy[j] = (v < -1.f) ? -1.f : ((v > 1.f) ? 1.f : v);
+        }
+
+        error = src_process(state, &data);
+
+        src_delete(state);
+
+        for(j=0; j<data.output_frames_gen; j++) {
+            float u = data.data_out[j];
+            u = (u < -1.f) ? -1.f : ((u > 1.f) ? 1.f : u);
+            uint8_t v = (0.5f * u + 0.5f) * 31.f;
+            _samples[i].data.push_back(v);
         }
         _samples[i].data.push_back(0xff);
+        delete [] data.data_in;
+        delete [] data.data_out;
     }
 }
 
