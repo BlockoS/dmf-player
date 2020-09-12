@@ -275,29 +275,28 @@ void SongPacker::packSamples(DMF::Song const& song) {
         DMF::Sample const& current = song.sample[i];
         size_t j = (current.rate <= 5) ? (current.rate-1) : 4;
         float scale = static_cast<float>(1 << current.bits);
-        float amplitude = pow(10.f, (2.f*current.amp/100.f - 1.f) * 96.f / 20.f);
-
-        //_samples[i].rate = 1;
-        _samples[i].rate = (262 * 60) * 256 / freq[j]; // [todo] remove
+        float amplitude = pow(10.f, (2.f*current.amp/100.f - 1.f) * 100.f / 20.f);
 
         int error;
         SRC_DATA data;
         SRC_STATE *state = src_new(SRC_SINC_BEST_QUALITY, 1, &error) ;
         
-        data.input_frames = data.output_frames = current.data.size();
+        data.input_frames = current.data.size();
+        data.output_frames = current.data.size();
         data.input_frames_used = data.output_frames_gen = 0;
-        data.end_of_input = 0;
-        data.src_ratio = 7000.f / freq[j]; // [todo] use pitch here (< 0 : divide 1+picth, > 0 multiply 1+pitch, 0: 1)
-
+        data.end_of_input = 1;
+        data.src_ratio = 7000.f / (freq[j] * (1+current.pitch-5)); // [todo] use pitch here (< 0 : divide 1+picth, > 0 multiply 1+pitch, 0: 1)
+                                                                    // [todo] < 5 pitch => size isssue
         float *dummy = new float[data.input_frames];
         data.data_in = dummy;
-        data.data_out = new float[data.output_frames]; // [todo] pitch => change the process loop
+        data.data_out = new float[data.output_frames];
 
         for(j=0; j<data.input_frames; j++) {
             float v = (2.f * (current.data[j] / scale) - 1.f) * amplitude;
             dummy[j] = (v < -1.f) ? -1.f : ((v > 1.f) ? 1.f : v);
         }
 
+        // [todo] loop input_frames_used < input_frames
         error = src_process(state, &data);
 
         src_delete(state);

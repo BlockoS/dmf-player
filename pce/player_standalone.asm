@@ -114,21 +114,6 @@ irq_1:
     lda    video_reg             ; get VDC status register
     sta    <_vdc_status
 
-    bbr2   <_vdc_status, @check_vsync
-@hsync:
-        jsr    dmf_pcm_update
-
-        st0    #$06
-        lda    <dmf.player.rcr
-        clc
-        adc    #$40
-        sta    video_data_l
-        cla
-        adc    #$00
-        sta    video_data_h
-        
-        bra    @end
-@check_vsync:
     bbr5   <_vdc_status, @end
 @vsync:
     task.irq_install
@@ -146,6 +131,16 @@ irq_1:
 ; CPU Timer.
 ;----------------------------------------------------------------------
 irq_timer:
+    pha
+    phx
+    phy
+
+    jsr    dmf_pcm_update
+    stz    irq_status
+    
+    ply
+    plx
+    pla
     rti
 
 ;----------------------------------------------------------------------
@@ -185,7 +180,7 @@ irq_reset:
     stz    $2000                ; clear all the RAM
     tii    $2000,$2001,$1FFF
 
-    lda    #%11111101
+    lda    #%11111001
     sta    irq_disable
     stz    irq_status
 
@@ -239,6 +234,9 @@ irq_reset:
     sta    video_data_l
     st2    #$00
 
+    lda    #%00000_1_00
+    sta    color_ctrl
+
     clx
 .l1:
     stx    psg_ch
@@ -272,6 +270,11 @@ irq_reset:
     lda    #high(dmf_update)
     sta    <_si+1
     jsr    task.add
+
+    stz    timer_cnt
+
+    lda    #$01
+    sta    timer_ctrl
 
     cli
     

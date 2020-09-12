@@ -352,14 +352,6 @@ bool Writer::writeSamplesInfos(std::vector<Sample> const& samples, size_t elemen
     fprintf(_output, "%s.samples:\n", _prefix.c_str());    
     fprintf(_output, "%s.samples.count:\n    .db $%02x\n", _prefix.c_str(), static_cast<uint32_t>(count));    
     for(int p=0; p<2; p++) {
-        fprintf(_output, "%s.samples.rate.%s:\n", _prefix.c_str(), postfix[p]);
-        for(size_t i=0; i<count;) {
-            size_t last = ((i+elementsPerLine) < count) ? elementsPerLine : (count-i);
-            fprintf(_output, "    .%s ", op[p]);
-            for(size_t j=0; j<last; j++, i++) {
-                fprintf(_output, "$%04x%c", static_cast<uint32_t>(samples[i].rate), (j<(last-1))?',':'\n');
-            }
-        }
         fprintf(_output, "%s.samples.offset.%s:\n", _prefix.c_str(), postfix[p]);
         for(size_t i=0; i<count;) {
             size_t last = ((i+4) < count) ? 4 : (count-i);

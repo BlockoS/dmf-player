@@ -4,7 +4,10 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-; pcm replay
+; "mutex" or whatever on wavbuff upload
+; speed flip/flop is broken
+; note cute doesn't work on pcm !
+; porta to note borken?
 ; pattern_break
 ; position_jump
 ; fine_tune
@@ -121,19 +124,15 @@ dmf.player.pattern.pos  .ds 1       ; current pattern position
 
 dmf.player.detune .ds 1             ; global detune
 
-; [todo] do we need this in zp?
-dmf.player.samples.rate.lo       .ds 2 ; PCM sample rate (RCR offset LSB) 
-dmf.player.samples.rate.hi       .ds 2 ; PCM sample rate (RCR offset MSB)
 dmf.player.samples.offset.lo     .ds 2 ; PCM samples ROM offset (LSB)
 dmf.player.samples.offset.hi     .ds 2 ; PCM samples ROM offset (MSB)
 dmf.player.samples.bank          .ds 2 ; PCM samples ROM bank
 
-
-dmf.player.rcr           .ds 1
-dmf.player.pcm.rcr       .ds PSG_CHAN_COUNT*2
-dmf.player.pcm.rcr.delta .ds PSG_CHAN_COUNT*2
 dmf.player.pcm.bank      .ds PSG_CHAN_COUNT
 dmf.player.pcm.ptr       .ds PSG_CHAN_COUNT*2
+dmf.player.pcm.state     .ds 1
+
+dmf.player.note_on      .ds 1 ; [todo] rename new_note
 
 dmf.zp.end:
 
@@ -173,7 +172,8 @@ dmf.player.volume.delta  .ds DMF_CHAN_COUNT
 dmf.player.freq.delta.lo .ds DMF_CHAN_COUNT
 dmf.player.freq.delta.hi .ds DMF_CHAN_COUNT
 
-dmf.instrument.flag .ds PSG_CHAN_COUNT
+dmf.instrument.flag      .ds PSG_CHAN_COUNT
+dmf.instrument.flag.orig .ds PSG_CHAN_COUNT
 
 dmf.instrument.vol.size  .ds PSG_CHAN_COUNT
 dmf.instrument.vol.loop  .ds PSG_CHAN_COUNT
@@ -203,9 +203,10 @@ dmf.fx.arp.speed   .ds PSG_CHAN_COUNT
 dmf.fx.vib.data .ds PSG_CHAN_COUNT
 dmf.fx.vib.tick .ds PSG_CHAN_COUNT
 
-dmf.fx.prt.speed .ds PSG_CHAN_COUNT
+dmf.fx.prt.speed .ds PSG_CHAN_COUNT ; portamento speed
 
-dmf.player.pcm.src    .ds PSG_CHAN_COUNT*2
+dmf.pcm.src.bank .ds PSG_CHAN_COUNT
+dmf.pcm.src.ptr  .ds PSG_CHAN_COUNT*2
 
 dmf.bss.end:
 
@@ -294,10 +295,17 @@ dmf_commit:
   .macro dmf.update_psg
 @ch\1:
     bbr7   <dmf.player.chn.flag+\1, @wav\1
-        ; [todo] reset pointer on note_on 
-        stz    <dmf.player.pcm.rcr+(2*\1)
-        stz    <dmf.player.pcm.rcr+(1+2*\1)
-        nop
+        bbr\1   <dmf.player.note_on, @pcm\1
+            lda    dmf.pcm.src.ptr+(2*\1)
+            sta    <dmf.player.pcm.ptr+(2*\1)
+            lda    dmf.pcm.src.ptr+(1+2*\1)
+            sta    <dmf.player.pcm.ptr+(1+2*\1)
+            lda    dmf.pcm.src.bank+\1
+            sta    <dmf.player.pcm.bank+\1
+            
+            rmb\1  <dmf.player.note_on
+@pcm\1:
+        smb\1  <dmf.player.pcm.state
 @wav\1:
     bbr6   <dmf.player.chn.flag+\1, @pan\1
         lda    dmf.player.wav.id+\1
@@ -316,7 +324,7 @@ dmf_commit:
         bbr0   <dmf.player.chn.flag+\1, @no_noise\1
             lda    <dmf.player.psg.freq.lo+\1
             sta    psg_noise
-            bra    @next\1
+            bra    @freq.end\1
 @no_noise\1:
             stz    psg_noise
 .endif
@@ -324,9 +332,12 @@ dmf_commit:
         sta    psg_freq.lo
         lda    <dmf.player.psg.freq.hi+\1
         sta    psg_freq.hi
+@freq.end\1:
         rmb4   <dmf.player.chn.flag+\1
 @next\1:
   .endm
+
+    stz    timer_ctrl
 
     clx
     stx    psg_ch
@@ -347,10 +358,12 @@ dmf_commit:
     stx    psg_ch
     dmf.update_psg 5
 
+    lda    #1
+    sta    timer_ctrl
+    stz    irq_status
+
     pla
     tam    #DMF_HEADER_MPR
-
-    stz    <dmf.player.rcr
 
     rts
 
@@ -385,6 +398,8 @@ dmf_commit:
 ;; Return:
 ;;
 dmf_wav_upload:
+    lda    #$01
+    sta    psg_ctrl
     stz    psg_ctrl
     cly
 @l0:                                ; [todo] unroll?
@@ -488,30 +503,14 @@ dmf_load_song:
     lda    [dmf.player.si]          ; sample count
     sta    <dmf.player.al
 
-    clc                             ; save pointer to sample rates (LSB)
+    clc                             ; samples ROM offset (LSB)
     lda    <dmf.player.si
     adc    #$01
-    sta    <dmf.player.samples.rate.lo
-    tax
-    lda    dmf.player.si+1
-    adc    #$00
-    sta    <dmf.player.samples.rate.lo+1
-
-    clc                             ; samples ROM offset (LSB)
-    sax
-    adc    <dmf.player.al
     sta    <dmf.player.samples.offset.lo
-    sax
+    tax
+    lda    <dmf.player.si+1
     adc    #$00
     sta    <dmf.player.samples.offset.lo+1
-
-    clc                             ; sample rate (MSB)
-    sax
-    adc    <dmf.player.al
-    sta    <dmf.player.samples.rate.hi
-    sax
-    adc    #$00
-    sta    <dmf.player.samples.rate.hi+1
 
     clc                             ; samples ROM offset (MSB)
     sax
@@ -692,9 +691,8 @@ update_state:                                 ; [todo] find a better name
     beq    @delay
         cmp    #$80
         bne    @cut
-            stz    <dmf.player.psg.ctrl, X
-            stz    <dmf.player.chn.flag, X
-            rts
+            stz    dmf.player.cut, X
+            jmp    dmf.note_off                ; [todo] fix
 @cut:
         dec    dmf.player.cut, X
 @delay:
@@ -1412,7 +1410,8 @@ dmf.note_cut:
     cmp    dmf.song.time.tick, X
     bcs    @note_cut.reset
 @note_cut.set:
-        ldx    <dmf.player.chn        
+        ldx    <dmf.player.chn
+        ora    #$80
         sta    dmf.player.cut, X
         rts
 @note_cut.reset:
@@ -1451,18 +1450,35 @@ dmf.note_off:
     stz    dmf.player.freq.delta.hi, X
     stz    dmf.player.chn.flag, X
     
+    lda    dmf.bit, X
+    trb    <dmf.player.note_on
+    
+
     lda    <dmf.player.psg.ctrl, X
     and    #%00_0_11111
     sta    <dmf.player.psg.ctrl, X
 
     rts
 
+dmf.bit:
+    .db %0000_0001
+    .db %0000_0010
+    .db %0000_0100
+    .db %0000_1000
+    .db %0001_0000
+    .db %0010_0000
+    .db %0100_0000
+    .db %1000_0000
+    
 ;;------------------------------------------------------------------------------------------
 dmf.note_on:
     ldx    <dmf.player.chn
     lda    dmf.player.note, X
     sta    dmf.player.note.previous, X
 
+    lda    dmf.bit, X
+    tsb    <dmf.player.note_on
+    
     lda    [dmf.player.ptr], Y
     sta    dmf.player.note, X
     iny
@@ -1486,17 +1502,25 @@ dmf.note_on:
     stz    dmf.instrument.vol.index, X
     stz    dmf.instrument.arp.index, X
     stz    dmf.instrument.wav.index, X
-
+ 
     lda    <dmf.player.psg.ctrl, X
     and    #%00_0_11111
     ora    #%10_0_00000
     sta    <dmf.player.psg.ctrl, X
 
-    
+    lda    dmf.instrument.flag.orig, X
+    sta    dmf.instrument.flag, X
+
     rts
+
 @pcm_reset:
-    ; [todo]
-    rts
+; [todo] hackish
+    stz    dmf.instrument.vol.index, X
+
+    lda    #(PSG_CTRL_DDA_ON | PSG_CTRL_FULL_VOLUME)    
+    sta    <dmf.player.psg.ctrl, X
+    dey
+    jmp    dmf.set_samples.ex
 
 ;;------------------------------------------------------------------------------------------
 dmf.set_wav:
@@ -1525,7 +1549,7 @@ dmf.enable_noise_channel:
     lda    [dmf.player.ptr], Y
     beq    @disable_noise_channel
         lda    <dmf.player.chn.flag, X
-        ora    #NOI_UPDATE
+        ora    #(FRQ_UPDATE | NOI_UPDATE)
         sta    <dmf.player.chn.flag, X
 
         iny
@@ -1533,7 +1557,8 @@ dmf.enable_noise_channel:
 
 @disable_noise_channel:
         lda    <dmf.player.chn.flag, X
-        and    #(~NOI_UPDATE)
+        and    #~NOI_UPDATE
+        ora    #FRQ_UPDATE
         sta    <dmf.player.chn.flag, X
         
         iny
@@ -1693,6 +1718,7 @@ dmf.set_instrument:
         ora    #INST_WAV
 @no_wav:
     sta    dmf.instrument.flag, X
+    sta    dmf.instrument.flag.orig, X
     ply
 
     rts
@@ -1887,8 +1913,11 @@ dmf.set_samples:
     ldx    <dmf.player.chn
 
     lda    [dmf.player.ptr], Y
-    beq    @pcm.disable
+    beq    dmf.pcm.disable
 @pcm.enable:
+        lda    dmf.bit, X
+        tsb    <dmf.player.note_on
+
         lda    <dmf.player.chn.flag, X
         and    #PAN_UPDATE
         ora    #PCM_UPDATE
@@ -1909,7 +1938,8 @@ dmf.set_samples:
 ;        ora    #PSG_CTRL_DDA_ON
         lda    #(PSG_CTRL_DDA_ON | PSG_CTRL_FULL_VOLUME)    
         sta    <dmf.player.psg.ctrl, X
-        
+
+dmf.set_samples.ex:
         lda    dmf.player.note, X
         cmp    #$0C
         bcc    @pcm.skip
@@ -1924,72 +1954,48 @@ dmf.set_samples:
         tay
 
         lda    [dmf.player.samples.bank], Y
-        sta    <dmf.player.pcm.bank, X
+        sta    dmf.pcm.src.bank, X
 
         txa
         asl    A
         tax
 
-        stz    <dmf.player.pcm.rcr, X
-        stz    <dmf.player.pcm.rcr+1, X
-
-        lda    [dmf.player.samples.rate.lo], Y
-        sta    <dmf.player.pcm.rcr.delta, X
-        lda    [dmf.player.samples.rate.hi], Y
-        sta    <dmf.player.pcm.rcr.delta+1, X
         lda    [dmf.player.samples.offset.lo], Y
-        sta    dmf.player.pcm.src, X
-        sta    <dmf.player.pcm.ptr, X
+        sta    dmf.pcm.src.ptr, X
         lda    [dmf.player.samples.offset.hi], Y
-        sta    dmf.player.pcm.src+1, X
-        sta    <dmf.player.pcm.ptr+1, X
-        ; [todo] put to bss
+        sta    dmf.pcm.src.ptr+1, X
 
         ply
 
         iny
         rts
 
-@pcm.disable:
+dmf.pcm.disable:
     lda    <dmf.player.chn.flag, X
     and    #$7f
     sta    <dmf.player.chn.flag, X
-    
-    txa
-    asl    A
-    tax
 
-    lda    #$ff
-    sta    <dmf.player.pcm.rcr, X
+    lda    dmf.bit, X
+    trb    <dmf.player.note_on
 
     iny
     rts
 
 ;;------------------------------------------------------------------------------------------
-   .macro dmf_pcm_start
-    stz    <dmf.player.rcr
-    ; [todo]
-   .endm
-
-;;------------------------------------------------------------------------------------------
     .macro dmf_pcm_update.ch
 @pcm.ch\1:
-    bbr7   <dmf.player.chn.flag+\1,  @pcm.ch\1.end
-
-    cpx    <dmf.player.pcm.rcr+(1+2*\1)
-    bne    @pcm.ch\1.end
+    bbr\1   <dmf.player.pcm.state,  @pcm.ch\1.end
         lda    <dmf.player.pcm.bank+\1
         tam    #DMF_DATA_MPR
 
-        lda    #\1
-        sta    psg_ch
-        
         lda    [dmf.player.pcm.ptr+(2*\1)]
         cmp    #$ff
         bne    @pcm.ch\1.update
-            sta    <dmf.player.pcm.rcr+(1+2*\1)
             bra    @pcm.ch\1.end
 @pcm.ch\1.update:
+        ldx    #\1
+        stx    psg_ch
+
         sta    psg_wavebuf
 
         inc    <dmf.player.pcm.ptr+(2*\1)
@@ -2005,14 +2011,7 @@ dmf.set_samples:
                 ora    #(DMF_DATA_MPR << 5)
                 sta    <dmf.player.pcm.ptr+(1+2*\1)
                 inc    <dmf.player.pcm.bank+\1
-@l\1:
-        lda    <dmf.player.pcm.rcr+(2*\1)
-        clc
-        adc    <dmf.player.pcm.rcr.delta+(2*\1)
-        sta    <dmf.player.pcm.rcr+(2*\1)
-        lda    <dmf.player.pcm.rcr+(1+2*\1)
-        adc    <dmf.player.pcm.rcr.delta+(1+2*\1)
-        sta    <dmf.player.pcm.rcr+(1+2*\1)
+@l\1: 
 @pcm.ch\1.end:
     .endm
 
@@ -2021,8 +2020,6 @@ dmf_pcm_update:
     tma    #DMF_DATA_MPR
     pha
     
-    ldx    <dmf.player.rcr
-
     dmf_pcm_update.ch 0
     dmf_pcm_update.ch 1
     dmf_pcm_update.ch 2
@@ -2030,8 +2027,6 @@ dmf_pcm_update:
     dmf_pcm_update.ch 4
     dmf_pcm_update.ch 5
 
-    inc    <dmf.player.rcr
-    
     pla
     tam    #DMF_DATA_MPR
 
