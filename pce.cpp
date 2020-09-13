@@ -261,6 +261,8 @@ void SongPacker::packPatternData(DMF::Song const& song) {
     } 
 }
 
+#define PCM_BLOCK_SIZE 1024
+
 void SongPacker::packSamples(DMF::Song const& song) {
     static const uint32_t freq[5] = {
         8000,
@@ -276,39 +278,54 @@ void SongPacker::packSamples(DMF::Song const& song) {
         size_t j = (current.rate <= 5) ? (current.rate-1) : 4;
         float scale = static_cast<float>(1 << current.bits);
         float amplitude = pow(10.f, (2.f*current.amp/100.f - 1.f) * 100.f / 20.f);
+        float pitch = (current.pitch >= 5) ? (current.pitch - 5 + 1) : (1.f/ (float)(1 + 5 - current.pitch));
 
         int error;
         SRC_DATA data;
         SRC_STATE *state = src_new(SRC_SINC_BEST_QUALITY, 1, &error) ;
-        
-        data.input_frames = current.data.size();
-        data.output_frames = current.data.size();
-        data.input_frames_used = data.output_frames_gen = 0;
-        data.end_of_input = 1;
-        data.src_ratio = 7000.f / (freq[j] * (1+current.pitch-5)); // [todo] use pitch here (< 0 : divide 1+picth, > 0 multiply 1+pitch, 0: 1)
-                                                                    // [todo] < 5 pitch => size isssue
-        float *dummy = new float[data.input_frames];
-        data.data_in = dummy;
-        data.data_out = new float[data.output_frames];
+        src_reset(state);
 
-        for(j=0; j<data.input_frames; j++) {
+        data.src_ratio = (7159090.f / 1024.f) / (freq[j] * pitch);
+       
+        float *dummy = new float[current.data.size()];
+        data.data_in = dummy;
+        data.data_out = new float[PCM_BLOCK_SIZE];
+
+        for(j=0; j<current.data.size(); j++) {
             float v = (2.f * (current.data[j] / scale) - 1.f) * amplitude;
             dummy[j] = (v < -1.f) ? -1.f : ((v > 1.f) ? 1.f : v);
         }
 
-        // [todo] loop input_frames_used < input_frames
-        error = src_process(state, &data);
+        do {
+            data.data_in += data.input_frames_used;
+            data.input_frames =  dummy + current.data.size() - data.data_in;
+
+            if(data.input_frames > PCM_BLOCK_SIZE) {
+                data.input_frames = PCM_BLOCK_SIZE;
+                data.end_of_input = 0;
+            }
+            else {
+                data.end_of_input = 1;
+            }
+            data.output_frames	= PCM_BLOCK_SIZE;
+            data.input_frames_used = 0;
+            data.output_frames_gen = 0;
+            
+            error = src_process(state, &data);
+
+            for(j=0; j<data.output_frames_gen; j++) {
+                float u = data.data_out[j];
+                u = (u < -1.f) ? -1.f : ((u > 1.f) ? 1.f : u);
+                uint8_t v = (0.5f * u + 0.5f) * 31.f;
+                _samples[i].data.push_back(v);
+            }
+        } while(!data.end_of_input);
+
+        _samples[i].data.push_back(0xff);
 
         src_delete(state);
 
-        for(j=0; j<data.output_frames_gen; j++) {
-            float u = data.data_out[j];
-            u = (u < -1.f) ? -1.f : ((u > 1.f) ? 1.f : u);
-            uint8_t v = (0.5f * u + 0.5f) * 31.f;
-            _samples[i].data.push_back(v);
-        }
-        _samples[i].data.push_back(0xff);
-        delete [] data.data_in;
+        delete [] dummy;
         delete [] data.data_out;
     }
 }
