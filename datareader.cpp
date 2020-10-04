@@ -498,7 +498,8 @@ void DataReader::fixInstruments(Song &song) {
     for(size_t i=0; i<song.instrument.size(); i++) {
         Instrument::Standard &std = song.instrument[i].std;
         for(size_t j=0; j<std.wave.size; j++) {
-            std.wave.value[j] %= song.waveTable.size();
+            uint8_t v = std.wave.value[j];
+            std.wave.value[j] = (v < song.waveTable.size()) ? v : 0;
         }
     }
 }

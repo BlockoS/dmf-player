@@ -4,7 +4,6 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-; "mutex" or whatever on wavbuff upload
 ; speed flip/flop is broken
 ; note cute doesn't work on pcm !
 ; porta to note borken?
@@ -267,30 +266,30 @@ dmf_commit:
     lda    <dmf.player.psg.ctrl+0
     sta    psg_ctrl
 
-    ldx    #$01
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+1
-    sta    psg_ctrl
+;    ldx    #$01
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+1
+;    sta    psg_ctrl
 
-    ldx    #$02
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+2
-    sta    psg_ctrl
+;    ldx    #$02
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+2
+;    sta    psg_ctrl
 
-    ldx    #$03
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+3
-    sta    psg_ctrl
+;    ldx    #$03
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+3
+;    sta    psg_ctrl
 
-    ldx    #$04
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+4
-    sta    psg_ctrl
+;    ldx    #$04
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+4
+;    sta    psg_ctrl
 
-    ldx    #$05
-    stx    psg_ch
-    lda    <dmf.player.psg.ctrl+5
-    sta    psg_ctrl
+;    ldx    #$05
+;    stx    psg_ch
+;    lda    <dmf.player.psg.ctrl+5
+;    sta    psg_ctrl
 
   .macro dmf.update_psg
 @ch\1:
@@ -342,21 +341,21 @@ dmf_commit:
     clx
     stx    psg_ch
     dmf.update_psg 0
-    ldx    #$01
-    stx    psg_ch
-    dmf.update_psg 1
-    ldx    #$02
-    stx    psg_ch
-    dmf.update_psg 2
-    ldx    #$03
-    stx    psg_ch
-    dmf.update_psg 3
-    ldx    #$04
-    stx    psg_ch
-    dmf.update_psg 4
-    ldx    #$05
-    stx    psg_ch
-    dmf.update_psg 5
+;    ldx    #$01
+;    stx    psg_ch
+;    dmf.update_psg 1
+;    ldx    #$02
+;    stx    psg_ch
+;    dmf.update_psg 2
+;    ldx    #$03
+;    stx    psg_ch
+;    dmf.update_psg 3
+;    ldx    #$04
+;    stx    psg_ch
+;    dmf.update_psg 4
+;    ldx    #$05
+;    stx    psg_ch
+;    dmf.update_psg 5
 
     lda    #1
     sta    timer_ctrl
@@ -668,16 +667,16 @@ dmf_update:
     
     clx
     jsr    update_state
-    ldx    #$01
-    jsr    update_state
-    ldx    #$02
-    jsr    update_state
-    ldx    #$03
-    jsr    update_state
-    ldx    #$04
-    jsr    update_state
-    ldx    #$05
-    jsr    update_state
+;    ldx    #$01
+;    jsr    update_state
+;    ldx    #$02
+;    jsr    update_state
+;    ldx    #$03
+;    jsr    update_state
+;    ldx    #$04
+;    jsr    update_state
+;    ldx    #$05
+;    jsr    update_state
 
     pla
     tam    #DMF_DATA_MPR
@@ -687,12 +686,15 @@ dmf_update:
     rts
 
 update_state:                                 ; [todo] find a better name
+    stx    <dmf.player.chn
+
     lda    dmf.player.cut, X
     beq    @delay
         cmp    #$80
         bne    @cut
             stz    dmf.player.cut, X
-            jmp    dmf.note_off                ; [todo] fix
+            jsr    dmf.note_off
+            bra    @delay
 @cut:
         dec    dmf.player.cut, X
 @delay:
@@ -702,8 +704,6 @@ update_state:                                 ; [todo] find a better name
         dec    dmf.player.delay, X
         rts
 @run:
-
-    stx    <dmf.player.chn
 
     lda    <dmf.player.chn.flag, X
     sta    <dmf.player.al
@@ -2021,11 +2021,11 @@ dmf_pcm_update:
     pha
     
     dmf_pcm_update.ch 0
-    dmf_pcm_update.ch 1
-    dmf_pcm_update.ch 2
-    dmf_pcm_update.ch 3
-    dmf_pcm_update.ch 4
-    dmf_pcm_update.ch 5
+;    dmf_pcm_update.ch 1
+;    dmf_pcm_update.ch 2
+;    dmf_pcm_update.ch 3
+;    dmf_pcm_update.ch 4
+;    dmf_pcm_update.ch 5
 
     pla
     tam    #DMF_DATA_MPR

@@ -248,7 +248,7 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                         }
                         // - Note cut
                         else if(pattern_data.effect[m].code == DMF::NOTE_CUT) {
-                                data |= 0x80;
+                            // Nothing atm...
                         }
                         _matrix[i].buffer[j].push_back(data);
                     }
@@ -338,8 +338,6 @@ void SongPacker::packSamples(DMF::Song const& song) {
                 _samples[i].data.push_back(v);
             }
         } while(!data.end_of_input);
-
-        printf("%d %d\n", n, current.data.size());
 
         _samples[i].data.push_back(0xff);
 
