@@ -263,6 +263,7 @@ void SongPacker::packPatternData(DMF::Song const& song) {
 
 #define PCM_BLOCK_SIZE 1024
 
+// NOTE: amplitude and pitch are ignored
 void SongPacker::packSamples(DMF::Song const& song) {
     static const uint32_t freq[5] = {
         8000,
@@ -277,25 +278,39 @@ void SongPacker::packSamples(DMF::Song const& song) {
         DMF::Sample const& current = song.sample[i];
         size_t j = (current.rate <= 5) ? (current.rate-1) : 4;
         float scale = static_cast<float>(1 << current.bits);
-        float amplitude = pow(10.f, (2.f*current.amp/100.f - 1.f) * 100.f / 20.f);
-        float pitch = (current.pitch >= 5) ? (current.pitch - 5 + 1) : (1.f/ (float)(1 + 5 - current.pitch));
 
         int error;
         SRC_DATA data;
         SRC_STATE *state = src_new(SRC_SINC_BEST_QUALITY, 1, &error) ;
         src_reset(state);
 
-        data.src_ratio = (7159090.f / 1024.f) / (freq[j] * pitch);
+        data.src_ratio = 7159090.f / 1024.f / (float)freq[j];
        
         float *dummy = new float[current.data.size()];
         data.data_in = dummy;
         data.data_out = new float[PCM_BLOCK_SIZE];
 
+/*
+        float s_min = current.data[0];
+        float s_max = current.data[0];
+        for(j=1; j<current.data.size(); j++) {
+            if(current.data[j] < s_min) {
+                s_min = current.data[j];
+            }
+            if(current.data[j] > s_max) {
+                s_max = current.data[j];
+            }
+        }
+*/
         for(j=0; j<current.data.size(); j++) {
-            float v = (2.f * (current.data[j] / scale) - 1.f) * amplitude;
+//            float v = 2.f * ((current.data[j] - s_min) / (s_max - s_min)) - 1.f;
+            float v = 2.f * (current.data[j] / scale) - 1.f;
             dummy[j] = (v < -1.f) ? -1.f : ((v > 1.f) ? 1.f : v);
         }
 
+        long n = 0;
+        data.input_frames_used = 0;
+        
         do {
             data.data_in += data.input_frames_used;
             data.input_frames =  dummy + current.data.size() - data.data_in;
@@ -313,6 +328,9 @@ void SongPacker::packSamples(DMF::Song const& song) {
             
             error = src_process(state, &data);
 
+            n += data.input_frames_used;
+
+
             for(j=0; j<data.output_frames_gen; j++) {
                 float u = data.data_out[j];
                 u = (u < -1.f) ? -1.f : ((u > 1.f) ? 1.f : u);
@@ -320,6 +338,8 @@ void SongPacker::packSamples(DMF::Song const& song) {
                 _samples[i].data.push_back(v);
             }
         } while(!data.end_of_input);
+
+        printf("%d %d\n", n, current.data.size());
 
         _samples[i].data.push_back(0xff);
 
