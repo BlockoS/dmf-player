@@ -261,6 +261,8 @@ dmf_commit:
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
 
+    sei
+
     clx
     stx    psg_ch                                 ; update PSG control register
     lda    <dmf.player.psg.ctrl+0
@@ -290,6 +292,8 @@ dmf_commit:
     stx    psg_ch
     lda    <dmf.player.psg.ctrl+5
     sta    psg_ctrl
+    
+    cli
 
   .macro dmf.update_psg
 @ch\1:
@@ -339,21 +343,27 @@ dmf_commit:
     stz    timer_ctrl
 
     clx
+    stx    <dmf.player.chn
     stx    psg_ch
     dmf.update_psg 0
     ldx    #$01
+    stx    <dmf.player.chn
     stx    psg_ch
     dmf.update_psg 1
     ldx    #$02
+    stx    <dmf.player.chn
     stx    psg_ch
     dmf.update_psg 2
     ldx    #$03
+    stx    <dmf.player.chn
     stx    psg_ch
     dmf.update_psg 3
     ldx    #$04
+    stx    <dmf.player.chn
     stx    psg_ch
     dmf.update_psg 4
     ldx    #$05
+    stx    <dmf.player.chn
     stx    psg_ch
     dmf.update_psg 5
 
@@ -2030,7 +2040,7 @@ dmf_pcm_update:
     pla
     tam    #DMF_DATA_MPR
 
-    lda    dmf.player.chn
+    lda    <dmf.player.chn
     sta    psg_ch
 
     rts
