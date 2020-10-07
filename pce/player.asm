@@ -4,6 +4,7 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
+; sample bank!
 ; speed flip/flop is broken
 ; note cute doesn't work on pcm !
 ; porta to note borken?
@@ -204,6 +205,7 @@ dmf.fx.vib.tick .ds PSG_CHAN_COUNT
 
 dmf.fx.prt.speed .ds PSG_CHAN_COUNT ; portamento speed
 
+dmf.pcm.bank     .ds PSG_CHAN_COUNT
 dmf.pcm.src.bank .ds PSG_CHAN_COUNT
 dmf.pcm.src.ptr  .ds PSG_CHAN_COUNT*2
 
@@ -580,6 +582,8 @@ dmf_load_song:
     lda    dmf.song.wav+1
     sta    <dmf.player.si+1
     jsr    dmf_wav_upload
+
+    stz    dmf.pcm.bank, X
 
     inx
     cpx    #DMF_CHAN_COUNT
@@ -1368,7 +1372,7 @@ dmf.note_slide_down:
 dmf.sync_signal:
 dmf.fine_tune:
 ;dmf.global_fine_tune:
-dmf.set_sample_bank:
+;dmf.set_sample_bank:
 ;dmf.set_volume:
 ;dmf.set_instrument:
 ;dmf.note_on:
@@ -1919,6 +1923,27 @@ dmf.panning:
     rts
 
 ;;------------------------------------------------------------------------------------------
+dmf.set_sample_bank:
+    ldx    <dmf.player.chn
+    lda    [dmf.player.ptr], Y
+
+    ; mul 12
+    sta    dmf.pcm.bank, X
+    asl    A
+    clc
+    adc    dmf.pcm.bank, X
+    asl    A
+    asl    A
+    sta    dmf.pcm.bank, X
+
+    lda    <dmf.player.chn.flag, X
+    bit    #PCM_UPDATE
+    bne    dmf.set_samples.ex
+
+    iny
+    rts
+
+;;------------------------------------------------------------------------------------------
 dmf.set_samples:
     ldx    <dmf.player.chn
 
@@ -1951,16 +1976,11 @@ dmf.set_samples:
 
 dmf.set_samples.ex:
         lda    dmf.player.note, X
-        cmp    #$0C
-        bcc    @pcm.skip
-@modulo_12:
-            sec
-            sbc    #$0c
-            cmp    #$0c
-            bcs    @modulo_12
-@pcm.skip:
-
         phy
+        tay
+        lda    modulo_12, Y
+        clc
+        adc    dmf.pcm.bank, X
         tay
 
         lda    [dmf.player.samples.bank], Y
@@ -2044,7 +2064,31 @@ dmf_pcm_update:
     sta    psg_ch
 
     rts
-
+;;------------------------------------------------------------------------------------------
+modulo_12:
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+    .db $00,$01,$02,$03
+    
 ;;------------------------------------------------------------------------------------------
     ; Align to 256
     .org (* + $ff) & $ff00
