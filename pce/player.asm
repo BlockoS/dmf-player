@@ -4,8 +4,7 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-; sample bank!
-; speed flip/flop is broken
+; speed flip/flop seems broken
 ; note cute doesn't work on pcm !
 ; porta to note borken?
 ; pattern_break
@@ -1950,9 +1949,6 @@ dmf.set_samples:
     lda    [dmf.player.ptr], Y
     beq    dmf.pcm.disable
 @pcm.enable:
-        lda    dmf.bit, X
-        tsb    <dmf.player.note_on
-
         lda    <dmf.player.chn.flag, X
         and    #PAN_UPDATE
         ora    #PCM_UPDATE
@@ -1974,6 +1970,11 @@ dmf.set_samples:
         lda    #(PSG_CTRL_DDA_ON | PSG_CTRL_FULL_VOLUME)    
         sta    <dmf.player.psg.ctrl, X
 
+        lda    dmf.bit, X
+        bit    <dmf.player.note_on
+        bne    dmf.set_samples.ex
+            iny
+            rts
 dmf.set_samples.ex:
         lda    dmf.player.note, X
         phy

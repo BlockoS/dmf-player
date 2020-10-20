@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors.
+// Copyright (c) 2015-2020, Vincent "MooZ" Cruz and other contributors.
 // All rights reserved.
 // Copyrights licensed under the New BSD License. See the accompanying
 // LICENSE file for terms.
@@ -66,8 +66,10 @@ namespace PCE {
         std::vector<Data_t>  data;
     };
 
+    bool operator==(Envelope const& e0, Envelope const& e1);
+    bool operator!=(Envelope const& e0, Envelope const& e1);
+
     struct InstrumentList {
-		// Wave macros seems to be ignored.
         enum EnvelopeType {
             Volume = 0,
             Arpeggio,
@@ -77,8 +79,10 @@ namespace PCE {
         std::vector<uint8_t> flag; 
         Envelope env[EnvelopeCount];
         size_t   count;
-        void pack(std::vector<DMF::Instrument> const& src);
     };
+
+    bool operator==(InstrumentList const& i0, InstrumentList const& i1);
+    bool operator!=(InstrumentList const& i0, InstrumentList const& i1);
 
     typedef std::vector<uint8_t> WaveTable;
 
@@ -86,6 +90,11 @@ namespace PCE {
         uint32_t rate;
         std::vector<uint8_t> data;
     };
+
+    bool operator==(Sample const& s0, Sample const& s1) ;
+    bool operator!=(Sample const& s0, Sample const& s1);
+
+///////////////// [todo] remove
 
     class Writer;
     
@@ -98,7 +107,6 @@ namespace PCE {
             bool output(Writer& writer);
 
         private:
-            void packPatternMatrix(DMF::Song const& song);
             void packPatternData(DMF::Song const& song);
             void packSamples(DMF::Song const& song);
 
@@ -109,6 +117,35 @@ namespace PCE {
             std::vector<PatternMatrix> _matrix;
             std::vector<Sample>        _samples;
     };
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <class T>
+    void add(std::vector<T> &data, std::vector<size_t> &index, T const& elmnt) {
+        size_t i;
+        for(i=0; (i<data.size()) && (data[i] != elmnt); i++) {
+        }
+        if(i == data.size()) {
+            data.push_back(elmnt);
+        }
+        index.push_back(i);
+    }
+
+    struct Packer {
+        struct Song {
+            DMF::Infos infos;
+            std::vector<PatternMatrix> matrix;
+            std::vector<size_t> wave;
+            InstrumentList instruments;
+            std::vector<size_t> sample;
+        };
+
+        std::vector<Song> song;
+        std::vector<WaveTable> wave;
+        std::vector<Sample> sample;
+    };
+
+    void add(Packer &p, DMF::Song &song);
 }
 
 #endif // PCE_H
