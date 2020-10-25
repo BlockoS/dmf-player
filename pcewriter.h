@@ -10,6 +10,10 @@
 #define MAX_CHAR_PER_LINE 92
 
 namespace PCE {
+
+bool write(std::string const& filename, Packer const& in);
+
+#if 0
     class Writer {
         public:
             Writer(std::string const& filename);
@@ -44,5 +48,8 @@ namespace PCE {
             size_t      _output_bytes;
             uint32_t    _bank;
     };
-}
+#endif
+
+} // PCE
+
 #endif // PCE_WRITER_H

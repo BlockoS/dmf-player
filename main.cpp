@@ -18,6 +18,8 @@ int main(int argc, char** argv) {
     PCE::Packer packer;
 
     for(int i=2; i<argc; i++) {
+        printf("processing: %s\n", argv[i]);
+
         DMF::DataReader reader;
         DMF::Song song;
         bool ok;
@@ -29,6 +31,18 @@ int main(int argc, char** argv) {
         }
 
         add(packer, song);
+    }
+
+    size_t s = 0;
+    for(size_t i=0; i<packer.wave.size(); i++) {
+        s += packer.wave[i].size();
+    }
+    for(size_t i=0; i<packer.sample.size(); i++) {
+        s += packer.sample[i].data.size();
+    }
+
+    if(!write(argv[1], packer)) {
+        return EXIT_FAILURE;
     }
 
 #if 0    

@@ -127,25 +127,7 @@ bool operator!=(Sample const& s0, Sample const& s1) {
     return (s0.rate != s1.rate) || (s0.data != s1.data);
 }
 
-
-
-
-
-
-
-
-
-SongPacker::SongPacker()
-{}
-
-SongPacker::~SongPacker()
-{}
-
-void SongPacker::pack(DMF::Song const& song) {    
-    packPatternData(song);
-}
-
-static inline void FlushRest(std::vector<uint8_t> &buffer, size_t &rest) {
+static inline void flush_rest(std::vector<uint8_t> &buffer, size_t &rest) {
     for(; rest >= 64; rest -= (rest >= 256) ? 256 : rest) {
         buffer.push_back(PCE::RestEx);
         buffer.push_back(rest % 256);
@@ -156,13 +138,32 @@ static inline void FlushRest(std::vector<uint8_t> &buffer, size_t &rest) {
     rest = 0;
 }
 
-void SongPacker::packPatternData(DMF::Song const& song) {
+static void pack(Packer::Song &out, DMF::Song &song) {
+    std::vector<PatternMatrix> &matrix = out.matrix;
+
+    std::vector<int> offsets;
+    offsets.resize(song.infos.totalRowsInPatternMatrix);
+    matrix.resize(song.infos.systemChanCount);
+    for(size_t j=0; j<song.infos.systemChanCount; j++) {
+        std::fill(offsets.begin(), offsets.end(), -1);
+    
+        for(size_t i=0; i<song.infos.totalRowsInPatternMatrix; i++) {
+            size_t k  = i + (j*song.infos.totalRowsInPatternMatrix);
+            size_t pattern = song.patternMatrix[k];
+            if(offsets[pattern] < 0) {
+                offsets[pattern] = matrix[j].packed.size();
+                matrix[j].packed.push_back(pattern);
+            }
+            matrix[j].pattern.push_back(offsets[pattern]); 
+        }
+    }
+
     // Process patterns
     for(size_t i=0; i<song.infos.systemChanCount; i++) {
-        _matrix[i].buffer.resize(_matrix[i].packed.size());
-        for(size_t j=0; j<_matrix[i].packed.size(); j++) {
+        matrix[i].buffer.resize(matrix[i].packed.size());
+        for(size_t j=0; j<matrix[i].packed.size(); j++) {
             size_t k, l;
-            size_t start = (i * song.infos.totalRowsInPatternMatrix + _matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
+            size_t start = (i * song.infos.totalRowsInPatternMatrix + matrix[i].packed[j]) * song.infos.totalRowsPerPattern;
             size_t rest = 0;
             size_t last = 0;
             for(k=0, l=start; k<song.infos.totalRowsPerPattern; k++, l++) {
@@ -171,37 +172,37 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                     rest++;
                     continue;
                 }
-                FlushRest(_matrix[i].buffer[j], rest);
+                flush_rest(matrix[i].buffer[j], rest);
                 
-                last = _matrix[i].buffer[j].size();
+                last = matrix[i].buffer[j].size();
                 if(pattern_data.note == 100) {
-                    _matrix[i].buffer[j].push_back(PCE::NoteOff);
+                    matrix[i].buffer[j].push_back(PCE::NoteOff);
                 }
                 else if(pattern_data.note || pattern_data.octave) {
                     uint8_t dummy;
                     // Let's fix octave and notes...
                     dummy  = pattern_data.note % 12;
                     dummy += (pattern_data.octave + (dummy ? 1 : 2)) * 12;
-                    _matrix[i].buffer[j].push_back(PCE::Note);
-                    _matrix[i].buffer[j].push_back(dummy);
+                    matrix[i].buffer[j].push_back(PCE::Note);
+                    matrix[i].buffer[j].push_back(dummy);
                 }
                 
                 if(pattern_data.volume != 0xffff) {
-                    last = _matrix[i].buffer[j].size();
-                    _matrix[i].buffer[j].push_back(PCE::SetVolume);
-                    _matrix[i].buffer[j].push_back(pattern_data.volume * 4);
+                    last = matrix[i].buffer[j].size();
+                    matrix[i].buffer[j].push_back(PCE::SetVolume);
+                    matrix[i].buffer[j].push_back(pattern_data.volume * 4);
                 }
                 
                 if(pattern_data.instrument != 0xffff) {
-                    last = _matrix[i].buffer[j].size();
-                    _matrix[i].buffer[j].push_back(PCE::SetInstrument);
-                    _matrix[i].buffer[j].push_back(pattern_data.instrument);
+                    last = matrix[i].buffer[j].size();
+                    matrix[i].buffer[j].push_back(PCE::SetInstrument);
+                    matrix[i].buffer[j].push_back(pattern_data.instrument);
                 }
                 
                 for(size_t m=0; m<song.effectCount[i]; m++) {
                     if(pattern_data.effect[m].code != 0xffff) {
-                        last = _matrix[i].buffer[j].size();
-                        _matrix[i].buffer[j].push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
+                        last = matrix[i].buffer[j].size();
+                        matrix[i].buffer[j].push_back(DMF2PCE(static_cast<DMF::Effect>(pattern_data.effect[m].code)));
                    
                         uint8_t data;
                         data = (pattern_data.effect[m].data != 0xffff) ? pattern_data.effect[m].data : 0x00;
@@ -231,41 +232,19 @@ void SongPacker::packPatternData(DMF::Song const& song) {
                         else if(pattern_data.effect[m].code == DMF::NOTE_CUT) {
                             // Nothing atm...
                         }
-                        _matrix[i].buffer[j].push_back(data);
+                        // - Set wav
+                        else if(pattern_data.effect[m].code == DMF::SET_WAVE) {
+                            data = out.wave[data % out.wave.size()];
+                        }
+                        matrix[i].buffer[j].push_back(data);
                     }
                 } // effects
-                _matrix[i].buffer[j][last] |= 0x80;
+                matrix[i].buffer[j][last] |= 0x80;
             }
-            FlushRest(_matrix[i].buffer[j], rest);   
-            _matrix[i].buffer[j].push_back(PCE::EndOfTrack);
+            flush_rest(matrix[i].buffer[j], rest);   
+            matrix[i].buffer[j].push_back(PCE::EndOfTrack);
         }
     } 
-}
-
-
-
-
-
-
-
-
-static void pack(std::vector<PatternMatrix> &out, DMF::Song &song) {
-    std::vector<int> offsets;
-    offsets.resize(song.infos.totalRowsInPatternMatrix);
-    out.resize(song.infos.systemChanCount);
-    for(size_t j=0; j<song.infos.systemChanCount; j++) {
-        std::fill(offsets.begin(), offsets.end(), -1);
-    
-        for(size_t i=0; i<song.infos.totalRowsInPatternMatrix; i++) {
-            size_t k  = i + (j*song.infos.totalRowsInPatternMatrix);
-            size_t pattern = song.patternMatrix[k];
-            if(offsets[pattern] < 0) {
-                offsets[pattern] = out[j].packed.size();
-                out[j].packed.push_back(pattern);
-            }
-            out[j].pattern.push_back(offsets[pattern]); 
-        }
-    }
 }
 
 static void pack(WaveTable &out, DMF::WaveTable &in) {
@@ -275,42 +254,44 @@ static void pack(WaveTable &out, DMF::WaveTable &in) {
     }
 }
 
-static void pack(InstrumentList &out, std::vector<DMF::Instrument> const& in) {
-    out.count = in.size();
+static void pack(Packer::Song &out, std::vector<DMF::Instrument> const& in) {
+    InstrumentList &inst = out.instruments;
+    inst.count = in.size();
     
-    out.flag.resize(out.count);
+    inst.flag.resize(inst.count);
 
-    out.env[InstrumentList::Volume].size.resize(out.count);
-    out.env[InstrumentList::Volume].loop.resize(out.count);
-    out.env[InstrumentList::Volume].data.resize(out.count);
+    inst.env[InstrumentList::Volume].size.resize(inst.count);
+    inst.env[InstrumentList::Volume].loop.resize(inst.count);
+    inst.env[InstrumentList::Volume].data.resize(inst.count);
 
-    out.env[InstrumentList::Arpeggio].size.resize(out.count);
-    out.env[InstrumentList::Arpeggio].loop.resize(out.count);
-    out.env[InstrumentList::Arpeggio].data.resize(out.count);
+    inst.env[InstrumentList::Arpeggio].size.resize(inst.count);
+    inst.env[InstrumentList::Arpeggio].loop.resize(inst.count);
+    inst.env[InstrumentList::Arpeggio].data.resize(inst.count);
 
-    out.env[InstrumentList::Wave].size.resize(out.count);
-    out.env[InstrumentList::Wave].loop.resize(out.count);
-    out.env[InstrumentList::Wave].data.resize(out.count);
+    inst.env[InstrumentList::Wave].size.resize(inst.count);
+    inst.env[InstrumentList::Wave].loop.resize(inst.count);
+    inst.env[InstrumentList::Wave].data.resize(inst.count);
                 
     for(size_t i=0; i<in.size(); i++) {
-        out.flag[i] = in[i].std.arpeggioMode ? 0x80 : 0x00; // [todo] add more ?
+        inst.flag[i] = in[i].std.arpeggioMode ? 0x80 : 0x00; // [todo] add more ?
 
-        out.env[InstrumentList::Volume].size[i] = in[i].std.volume.size;
-        out.env[InstrumentList::Volume].loop[i] = in[i].std.volume.loop;
-        for(size_t j=0; j<out.env[InstrumentList::Volume].size[i]; j++) {
-            out.env[InstrumentList::Volume].data[i][j] = in[i].std.volume.value[4*j] * 4;
+        inst.env[InstrumentList::Volume].size[i] = in[i].std.volume.size;
+        inst.env[InstrumentList::Volume].loop[i] = in[i].std.volume.loop;
+        for(size_t j=0; j<inst.env[InstrumentList::Volume].size[i]; j++) {
+            inst.env[InstrumentList::Volume].data[i][j] = in[i].std.volume.value[4*j] * 4;
         }
         
-        out.env[InstrumentList::Arpeggio].size[i] = in[i].std.arpeggio.size;
-        out.env[InstrumentList::Arpeggio].loop[i] = in[i].std.arpeggio.loop;
-        for(size_t j=0; j<out.env[InstrumentList::Arpeggio].size[i]; j++) {
-            out.env[InstrumentList::Arpeggio].data[i][j] = in[i].std.arpeggio.value[4*j];
+        inst.env[InstrumentList::Arpeggio].size[i] = in[i].std.arpeggio.size;
+        inst.env[InstrumentList::Arpeggio].loop[i] = in[i].std.arpeggio.loop;
+        for(size_t j=0; j<inst.env[InstrumentList::Arpeggio].size[i]; j++) {
+            inst.env[InstrumentList::Arpeggio].data[i][j] = in[i].std.arpeggio.value[4*j];
         }
         
-        out.env[InstrumentList::Wave].size[i] = in[i].std.wave.size;
-        out.env[InstrumentList::Wave].loop[i] = in[i].std.wave.loop;
-        for(size_t j=0; j<out.env[InstrumentList::Wave].size[i]; j++) {
-            out.env[InstrumentList::Wave].data[i][j] = in[i].std.wave.value[4*j];
+        inst.env[InstrumentList::Wave].size[i] = in[i].std.wave.size;
+        inst.env[InstrumentList::Wave].loop[i] = in[i].std.wave.loop;
+        for(size_t j=0; j<inst.env[InstrumentList::Wave].size[i]; j++) {
+            uint8_t wav_id = out.wave[in[i].std.wave.value[4*j] % out.wave.size()];
+            inst.env[InstrumentList::Wave].data[i][j] = wav_id;
         }
     }
 }
@@ -362,7 +343,6 @@ static void pack(Sample &out, DMF::Sample const &in) {
 
     long n = 0;
     data.input_frames_used = 0;
-    
     do {
         data.data_in += data.input_frames_used;
         data.input_frames =  dummy + in.data.size() - data.data_in;
@@ -405,55 +385,20 @@ void add(Packer &p, DMF::Song &in) {
     Packer::Song &song = p.song.back();
     song.infos = in.infos;
     
-    pack(song.matrix, in);
-    pack(song.instruments, in.instrument);
-  
     for(size_t i=0; i<in.waveTable.size(); i++) {
         WaveTable wav;
         pack(wav, in.waveTable[i]);
         add(p.wave, song.wave, wav);
     }
 
+    pack(song, in);
+    pack(song, in.instrument);
+
     for(size_t i=0; i<in.sample.size(); i++) {
         Sample sample;
         pack(sample, in.sample[i]);
         add(p.sample, song.sample, sample);
     }
-
-    // [todo] pattern data
-}
-
-// [todo] rewrite
-bool SongPacker::output(Writer& writer)
-{
-    if(!writer.write(_infos, _instruments.count)) {
-        fprintf(stderr, "Failed to write infos.\n");
-        return false;
-    }
-    if(!writer.writeSamplesInfos(_samples, 16)) {
-        fprintf(stderr, "Failed to write samples infos.\n");
-        return false;
-    }
-
-    if(!writer.write(_waveTable)) {
-        fprintf(stderr, "Failed to write wave buffers.\n");
-        return false;
-    }
-    if(!writer.writeInstruments(_instruments)) {
-        fprintf(stderr, "Failed to write instruments.\n");
-        return false;
-    }
-    if(!writer.writePatterns(_infos, _matrix)) {
-        fprintf(stderr, "Failed to write wave patterns.\n");
-        return false;
-    }
-    if(!writer.writeSamples(_samples)) {
-        fprintf(stderr, "Failed to write samples.\n");
-        return false;
-    }
-
-    // writer.writeBinary(_infos, _waveTable, _instruments, _matrix);
-    return true;
 }
 
 } // PCE

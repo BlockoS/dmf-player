@@ -7,100 +7,219 @@
 
 #include "pcewriter.h"
 
-#define MAX_SONG_PREFIX 32
-
 namespace PCE {
 
-Writer::Writer(std::string const& filename)
-    : _filename(filename)
-    , _prefix("")
-    , _output(nullptr)
-{}
+struct Context {
+    std::string filename;
+    FILE       *stream;
+    size_t      output_bytes;
+    uint32_t    bank;
+};
 
-Writer::~Writer() {
-    close();
-}
 
-bool Writer::open() {
-    close();
-    
-    _output = fopen(_filename.c_str(), "wb");
-    if(!_output) {
-        fprintf(stderr, "Failed to open %s: %s\n", _filename.c_str(), strerror(errno));
+static bool open(const std::string &in, Context &ctx) {
+    ctx.filename = in;
+    ctx.stream = fopen(in.c_str(), "wb");
+    if(!ctx.stream) {
+        fprintf(stderr, "Failed to open %s: %s\n", in.c_str(), strerror(errno));
         return false;
     }
+    ctx.bank = 0;
+    ctx.output_bytes = 0;
     return true;
 }
 
-void Writer::close() {
-    if(_output) {
-        fclose(_output);
-        _output = nullptr;
+static void close(Context &ctx) {
+    if(ctx.stream) {
+        fclose(ctx.stream);
+        ctx.stream = nullptr;
     }
 }
 
-bool Writer::write(DMF::Infos const& infos, size_t instrument_count) {
-    if(infos.name.length) {
-        _prefix.assign(infos.name.data, infos.name.length);
-        // Replace any invalid char by '_'.
-        std::regex reg("([^[:alnum:]._])");
-        _prefix = regex_replace(_prefix, reg, std::string("_"));
-        if(_prefix.size() > MAX_SONG_PREFIX) {
-            _prefix.resize(MAX_SONG_PREFIX);
-        }
-    }
-    else {
-        _prefix = "song";
-    }
+#define ELEMENTS_PER_LINE 16
 
-    _bank = 0;
-
-    fprintf(_output, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_HEADER_MPR << 13)\n", _bank);
-    _bank++;
-
-    fprintf(_output, "%s:\n"
-                     "%s.timeBase:        .db $%02x\n"
-                     "%s.timeTick:        .db $%02x, $%02x\n"
-                     "%s.patternRows:     .db $%02x\n"
-                     "%s.matrixRows:      .db $%02x\n"
-                     "%s.instrumentCount: .db $%02x\n"
-                     "%s.pointers:\n"
-                     "    .dw %s.wave\n"
-                     "    .dw %s.instruments\n"
-                     "    .dw %s.matrix\n",
-                     _prefix.c_str(),
-                     _prefix.c_str(), infos.timeBase,
-                     _prefix.c_str(), infos.tickTime[0], infos.tickTime[1],
-                     _prefix.c_str(), infos.totalRowsPerPattern,
-                     _prefix.c_str(), infos.totalRowsInPatternMatrix,
-                     _prefix.c_str(), (uint8_t)instrument_count,
-                     _prefix.c_str(),
-                     _prefix.c_str(),
-                     _prefix.c_str(),
-                     _prefix.c_str());
-                    
-    fprintf(_output, "%s.name:\n"
-                     "  .db %d\n"
-                     "  .db \"%s\"\n"
-                     "%s.author:\n"
-                     "  .db %d\n"
-                     "  .db \"%s\"\n",
-                     _prefix.c_str(), (int)strlen(infos.name.data), infos.name.data,
-                     _prefix.c_str(), (int)strlen(infos.author.data), infos.author.data);
+static void write_ptr_tbl(Context &ctx, const char* prefix, const char* suffix, size_t start, size_t count, size_t elements_per_line, bool bank) {
+    static char const* postfix[] = { "lo", "hi" };
+    static char const* op[] = { "dwl", "dwh" };
     
-    return true;
+    if(bank) {
+        fprintf(ctx.stream, "%s.%s.bank:\n", prefix, suffix);
+        for(size_t i=0; i<count;) {
+            fprintf(ctx.stream, "    .db bank(%s%02x.%s)", prefix, static_cast<uint32_t>(start+i), suffix);
+            i++;
+            for(size_t j=1; (j<elements_per_line) && (i<count); j++, i++) {
+                fprintf(ctx.stream, ",bank(%s%02x.%s)", prefix, static_cast<uint32_t>(start+i), suffix);
+            }
+            fprintf(ctx.stream, "\n");
+        }
+    }
+    
+    for(int p=0; p<2; p++) {
+        fprintf(ctx.stream, "%s.%s.%s:\n", prefix, suffix, postfix[p]);
+        for(size_t i=0; i<count;) {
+            fprintf(ctx.stream, "    .%s %s%02x.%s", op[p], prefix, static_cast<uint32_t>(start+i), suffix);
+            i++;
+            for(size_t j=1; (j<elements_per_line) && (i<count); j++, i++) {
+                fprintf(ctx.stream, ",%s%02x.%s", prefix, static_cast<uint32_t>(start+i), suffix);
+            }
+            fprintf(ctx.stream, "\n");
+        }
+    }
 }
 
-bool Writer::writeBytes(const uint8_t* buffer, size_t size, size_t elementsPerLine) {
-    for(size_t i=0; i<size; ) {
-        size_t last = ((elementsPerLine+i)<size) ? elementsPerLine : (size-i);
-        fprintf(_output, "    .db ");
-        for(size_t j=0; j<last; j++, i++) {
-            fprintf(_output,"$%02x%c", *buffer++, ((j+1) < last) ? ',' : '\n');
+static void write_ptr_tbl(Context &ctx, const char* name, size_t start, size_t count, size_t elements_per_line, bool bank) {
+    static char const* postfix[] = { "lo", "hi" };
+    static char const* op[] = { "dwl", "dwh" };
+    
+    if(bank) {
+        fprintf(ctx.stream, "%s.bank:\n", name);
+        for(size_t i=0; i<count;) {
+            fprintf(ctx.stream, "    .db bank(%s%02x)", name, static_cast<uint32_t>(start+i));
+            i++;
+            for(size_t j=1; (j<elements_per_line) && (i<count); j++, i++) {
+                fprintf(ctx.stream, ",bank(%s%02x)", name, static_cast<uint32_t>(start+i));
+            }
+            fprintf(ctx.stream, "\n");
         }
+    }
+    
+    for(int p=0; p<2; p++) {
+        fprintf(ctx.stream, "%s.%s:\n", name, postfix[p]);
+        for(size_t i=0; i<count;) {
+            fprintf(ctx.stream, "    .%s %s%02x", op[p], name, static_cast<uint32_t>(start+i));
+            i++;
+            for(size_t j=1; (j<elements_per_line) && (i<count); j++, i++) {
+                fprintf(ctx.stream, ",%s%02x", name, static_cast<uint32_t>(start+i));
+            }
+            fprintf(ctx.stream, "\n");
+        }
+    }
+}
+
+template <typename T>
+static void write_tbl(Context &ctx, std::vector<T> const& elmnt, size_t elements_per_line) {
+    for(size_t i=0; i<elmnt.size();) {
+        fprintf(ctx.stream, "    .db $%02x", static_cast<uint8_t>(elmnt[i++]));
+        for(size_t j=1; (j<elements_per_line) && (i<elmnt.size()); j++, i++) {
+            fprintf(ctx.stream, ",$%02x", static_cast<uint32_t>(elmnt[i]));
+        }
+        fprintf(ctx.stream, "\n");
+    }
+}
+
+static bool write_bytes(Context &ctx, const uint8_t* buffer, size_t size, size_t elements_per_line) {
+    for(size_t i=0; i<size; ) {
+        fprintf(ctx.stream, "    .db $%02x", *buffer++);
+        i++;
+        for(size_t j=1; (j<elements_per_line) && (i<size); j++, i++) {
+            fprintf(ctx.stream,",$%02x", *buffer++);
+        }
+        fprintf(ctx.stream, "\n");
     }
     return true;
 }
+
+static void write_instruments(Context &ctx, const char *prefix, InstrumentList const& instruments) {
+    const char* names[InstrumentList::EnvelopeCount] = {
+        "vol",
+        "arp",
+        "wav"
+    };
+    char buffer[64];
+    
+    fprintf(ctx.stream, "%s.it:\n", prefix);
+    for(size_t i=0; i<InstrumentList::EnvelopeCount; i++) {
+        sprintf(buffer, "it.%s", names[i]);
+        fprintf(ctx.stream, "%s.%s.size:\n", prefix, buffer);
+        write_bytes(ctx, &instruments.env[i].size[0], instruments.count, 16);
+        fprintf(ctx.stream, "%s.%s.loop:\n", prefix, buffer);
+        write_bytes(ctx, &instruments.env[i].loop[0], instruments.count, 16);
+        
+        sprintf(buffer, "%s.it.%s", prefix, names[i]);
+        write_ptr_tbl(ctx, buffer, 0, instruments.count, 8, false);
+    }
+    fprintf(ctx.stream, "%s.it.flag:\n", prefix);
+    write_bytes(ctx, &instruments.flag[0], instruments.count, 16);
+    
+    for(size_t i=0; i<InstrumentList::EnvelopeCount; i++) {
+        for(unsigned int j=0; j<instruments.count; j++) {
+            fprintf(ctx.stream, "%s.it.%s%02x:\n", prefix, names[i], static_cast<uint8_t>(j));
+            if(instruments.env[i].size[j]) {
+                write_bytes(ctx, &instruments.env[i].data[j][0], instruments.env[i].size[j], 16);
+            }
+        }
+    }
+}
+
+static bool write_header(Context &ctx, Packer const &in) {
+#define print(name, member) \
+do { \
+    fprintf(ctx.stream, #name":\n"); \
+    for(size_t i=0; i<in.song.size(); ) { \
+        fprintf(ctx.stream, "    .db %d", (int)in.song[i++].member); \
+        for(size_t j=1; (j<ELEMENTS_PER_LINE) && (i < in.song.size()); j++, i++) { \
+            fprintf(ctx.stream, ",%d", (int)in.song[i].member); \
+        } \
+        fprintf(ctx.stream,"\n"); \
+    } \
+} while(0)
+
+    fprintf(ctx.stream, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_HEADER_MPR << 13)\n", ctx.bank);
+    fprintf(ctx.stream, "song.count: .db %ld\n", in.song.size());
+
+    print(song.time_base, infos.timeBase);
+    print(song.time_tick_0, infos.tickTime[0]);
+    print(song.time_tick_1, infos.tickTime[1]);
+    print(song.pattern_rows, infos.totalRowsPerPattern);
+//    write_ptr_tbl(ctx, "song", "ptr", 0, in.song.size(), ELEMENTS_PER_LINE/2, true);
+    print(song.matrix_rows, infos.totalRowsInPatternMatrix);
+//    write_ptr_tbl(ctx, "song", "mtx", 0, in.song.size(), ELEMENTS_PER_LINE/2, true);
+    print(song.instrument_count, instruments.count);
+    print(song.sample_count, sample.size());
+    write_ptr_tbl(ctx, "song" ,"sp", 0, in.song.size(), ELEMENTS_PER_LINE/2, false);
+
+    write_ptr_tbl(ctx, "song.wv", 0, in.wave.size(), ELEMENTS_PER_LINE/2, false);
+    for(size_t i=0; i<in.wave.size(); i++) {
+        fprintf(ctx.stream, "song.wv%02x:\n", static_cast<uint8_t>(i));
+        write_bytes(ctx, in.wave[i].data(), in.wave[i].size(), ELEMENTS_PER_LINE);
+    }
+
+    for(size_t i=0; i<in.song.size(); i++) {
+        fprintf(ctx.stream, "song%02x.sp:\n", static_cast<uint8_t>(i));
+        write_tbl(ctx, in.song[i].sample, ELEMENTS_PER_LINE);
+    }
+
+    for(size_t i=0; i<in.song.size(); i++) {
+        char prefix[256];
+        snprintf(prefix, 256, "song%02x", static_cast<uint8_t>(i));
+        write_instruments(ctx, prefix, in.song[i].instruments);
+    }
+
+// [todo] write matrices
+
+#undef print
+
+    return true;
+}
+
+// [todo] write samples
+// [todo] write patterns
+
+bool write(std::string const& filename, Packer const& in) {
+    Context ctx;
+    if(!open(filename, ctx)) {
+        return false;
+    }
+    if(!write_header(ctx, in)) {
+        return false;
+    }
+    close(ctx);
+    return true;
+}
+
+} // PCE
+
+#if 0
 
 bool Writer::writePointerTable(const char* pointerBasename, size_t start, size_t count, size_t elementsPerLine, bool bank) {
     static char const* postfix[] = { "lo", "hi" };
@@ -178,44 +297,6 @@ bool Writer::write(DMF::Infos const& infos, std::vector<uint8_t> const& pattern)
     for(unsigned int j=0; ret && (j<infos.systemChanCount); j++) {
         fprintf(_output, "%s.matrix_%04x:\n", _prefix.c_str(), j);
         ret = writeBytes(&pattern[j*infos.totalRowsInPatternMatrix], infos.totalRowsInPatternMatrix, 16);
-    }
-    return ret;
-}
-
-bool Writer::writeInstruments(InstrumentList const& instruments) {
-    bool ret  = true;
-    const char* names[InstrumentList::EnvelopeCount] = {
-        "volume",
-        "arpeggio",
-        "wave"
-    };
-    char buffer[64];
-    
-    fprintf(_output, "%s.instruments:\n", _prefix.c_str());
-    for(size_t i=0; ret && (i<InstrumentList::EnvelopeCount); i++) {
-        sprintf(buffer, "instruments.%s", names[i]);
-        fprintf(_output, "%s.%s.size:\n", _prefix.c_str(), buffer);
-        if(ret) {
-            ret = writeBytes(&instruments.env[i].size[0], instruments.count, 16);
-            if(ret) {
-                fprintf(_output, "%s.%s.loop:\n", _prefix.c_str(), buffer);
-                ret = ret && writeBytes(&instruments.env[i].loop[0], instruments.count, 16);
-                ret = ret && writePointerTable(buffer, 0, instruments.count, 8);
-            }
-        }
-    }
-    if(ret) {
-        fprintf(_output, "%s.instruments.flag:\n", _prefix.c_str());
-        ret = writeBytes(&instruments.flag[0], instruments.count, 16);
-    }
-    
-    for(size_t i=0; ret && (i<InstrumentList::EnvelopeCount); i++) {
-        for(unsigned int j=0; ret && (j<instruments.count); j++) {
-            fprintf(_output, "%s.instruments.%s_%04x:\n", _prefix.c_str(), names[i], j);
-            if(instruments.env[i].size[j]) {
-                ret = writeBytes(&instruments.env[i].data[j][0], instruments.env[i].size[j], 16);
-            }
-        }
     }
     return ret;
 }
@@ -400,6 +481,4 @@ bool Writer::writeSamples(std::vector<Sample> const& samples) {
     }
     return ret;
 }
-
-
-} // PCE
+#endif
