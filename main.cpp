@@ -10,6 +10,8 @@
 #include "pcewriter.h"
 
 int main(int argc, char** argv) {
+    // [todo] command line argument : bank
+    
     if(argc < 3) {
         fprintf(stderr, "Usage: %s out.asm file0.dmf file1.dmf ... \n", argv[0]);
         return EXIT_FAILURE;
@@ -44,21 +46,5 @@ int main(int argc, char** argv) {
     if(!write(argv[1], packer)) {
         return EXIT_FAILURE;
     }
-
-#if 0    
-    ok = reader.load(argv[1], song);
-    if(!ok) {
-        fprintf(stderr, "An error occured while reading %s\n", argv[1]);
-        return 1;
-    }
-    
-    packer.pack(song);
-    
-    PCE::Writer writer(argv[2]);
-    
-    writer.open();
-        packer.output(writer);
-    writer.close();
-#endif
     return EXIT_SUCCESS;
 }

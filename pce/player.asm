@@ -18,8 +18,9 @@
 ;; Title: DMF player.
 ;;
 
-; The song data will be mapped on banks 5 and 6
-DMF_HEADER_MPR = 4
+; The song data will be mapped on banks 3, 4 and 5
+DMF_HEADER_MPR = 3
+DMF_MATRIX_MPR=4
 DMF_DATA_MPR = 5
 
 DMF_HEADER_SIZE = 12
@@ -81,10 +82,10 @@ FX_NOTE          = %1000_0000
 
 ;;------------------------------------------------------------------------------------------
     .zp
-dmf.zp.begin:
-
 mul8.lo .ds 4
 mul8.hi .ds 4
+
+dmf.zp.begin:
 
 dmf.player.si .ds 2
 dmf.player.al .ds 1
@@ -123,9 +124,7 @@ dmf.player.pattern.pos  .ds 1       ; current pattern position
 
 dmf.player.detune .ds 1             ; global detune
 
-dmf.player.samples.offset.lo     .ds 2 ; PCM samples ROM offset (LSB)
-dmf.player.samples.offset.hi     .ds 2 ; PCM samples ROM offset (MSB)
-dmf.player.samples.bank          .ds 2 ; PCM samples ROM bank
+dmf.player.samples.offset .ds 2 ; PCM samples index
 
 dmf.player.pcm.bank      .ds PSG_CHAN_COUNT
 dmf.player.pcm.ptr       .ds PSG_CHAN_COUNT*2
@@ -139,18 +138,16 @@ dmf.zp.end:
     .bss
 dmf.bss.begin:
 
-dmf.song.bank   .ds 1
-dmf.song.ptr    .ds 2
-dmf.song.name   .ds 2
-dmf.song.author .ds 2
+dmf.song.bank .ds 1
+dmf.song.id   .ds 1
 dmf.song.infos:
 dmf.song.time.base .ds 1
 dmf.song.time.tick .ds 2
 dmf.song.pattern.rows .ds 1
 dmf.song.matrix.rows  .ds 1
 dmf.song.instrument_count  .ds 1
-dmf.song.wav               .ds 2
 dmf.song.instruments       .ds 2
+dmf.song.wav               .ds 2
 dmf.song.matrix            .ds 2
 
 dmf.player.pattern.bank .ds DMF_CHAN_COUNT
@@ -258,9 +255,14 @@ mul8:
 dmf_commit:
     tma    #DMF_HEADER_MPR
     pha
-    
+    tma    #DMF_MATRIX_MPR
+    pha
+
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
+    
+    inc    A
+    tam    #DMF_MATRIX_MPR
 
     sei
 
@@ -373,31 +375,18 @@ dmf_commit:
     stz    irq_status
 
     pla
+    tam    #DMF_MATRIX_MPR
+
+    pla
     tam    #DMF_HEADER_MPR
 
     rts
 
 @load_wav:
-    stz    <dmf.player.si
-
-    lsr    A
-    ror    <dmf.player.si
-
-    lsr    A
-    ror    <dmf.player.si
-
-    lsr    A
-    ror    <dmf.player.si
-
-    say
-
-    lda    dmf.song.wav
-    clc
-    adc    <dmf.player.si
+    tay
+    lda    song.wv.lo, Y
     sta    <dmf.player.si
-
-    say
-    adc    dmf.song.wav+1
+    lda    song.wv.hi, Y
     sta    <dmf.player.si+1
 
 ;;
@@ -426,24 +415,31 @@ dmf_wav_upload:
 ;; Initialize player and load song.
 ;;
 ;; Parameters:
-;;  dmf.song.bank - Song data first bank
-;;  dmf.song.ptr  - Pointer to song data
+;;  Y - Song index.
 ;;
 ;; Return:
 ;;
 dmf_load_song:
     tma    #DMF_HEADER_MPR
     pha
+
+    tma    #DMF_MATRIX_MPR
+    pha
+    
     tma    #DMF_DATA_MPR
     pha
     
-    lda    dmf.song.bank
+    lda    #bank(songs)
+    sta    dmf.song.bank
     tam    #DMF_HEADER_MPR
+    
+    inc    A
+    tam    #DMF_MATRIX_MPR
 
-    lda    dmf.song.ptr
+    lda    #low(songs)
     sta    <dmf.player.si
 
-    lda    dmf.song.ptr+1
+    lda    #high(songs)
     and    #$1f
     ora    #DMF_HEADER_MPR<<5
     sta    <dmf.player.si+1
@@ -452,6 +448,10 @@ dmf_load_song:
 
     pla
     tam    #DMF_DATA_MPR
+
+    pla
+    tam    #DMF_MATRIX_MPR
+    
     pla
     tam    #DMF_HEADER_MPR
 
@@ -463,80 +463,42 @@ dmf_load_song:
 ;; The song data rom is assumed to have already been mapped.
 ;;
 ;; Parameters:
-;;  player.si - Pointer to song data
+;;  Y - Song index
+;;  player.si - Pointer to songs infos
 ;;
 ;; Return:
 ;;
 @load_song:
-    ; read song header
-    cly
-@copy_header:
-    lda    [dmf.player.si], Y
-    sta    dmf.song.infos, Y
-    iny
-    cpy    #DMF_HEADER_SIZE
-    bne    @copy_header
+    sty    dmf.song.id
 
-    ; save address to song name
-    tya
-    clc
-    adc    <dmf.player.si
-    sta    <dmf.player.si
-    sta    dmf.song.name
-    cla
-    adc    <dmf.player.si+1
-    sta    <dmf.player.si+1
-    sta    dmf.song.name+1
-
-    ; move to the song author
-    lda    [dmf.player.si]          ; string length
-    inc    A
-    clc
-    adc    <dmf.player.si
-    sta    dmf.song.author
-    sta    <dmf.player.si
-    cla
-    adc    <dmf.player.si+1
-    sta    dmf.song.author+1
-    sta    <dmf.player.si+1
-
-    ; move to samples
-    lda    [dmf.player.si]          ; string length
-    inc    A
-    clc
-    adc    <dmf.player.si
-    sta    <dmf.player.si
-    cla
-    adc    <dmf.player.si+1
-    sta    <dmf.player.si+1
-
-    lda    [dmf.player.si]          ; sample count
-    sta    <dmf.player.al
-
-    clc                             ; samples ROM offset (LSB)
-    lda    <dmf.player.si
-    adc    #$01
-    sta    <dmf.player.samples.offset.lo
-    tax
-    lda    <dmf.player.si+1
-    adc    #$00
-    sta    <dmf.player.samples.offset.lo+1
-
-    clc                             ; samples ROM offset (MSB)
-    sax
-    adc    <dmf.player.al
-    sta    <dmf.player.samples.offset.hi
-    sax
-    adc    #$00
-    sta    <dmf.player.samples.offset.hi+1
-
-    clc                             ; samples ROM bank
-    sax
-    adc    <dmf.player.al
-    sta    <dmf.player.samples.bank
-    sax
-    adc    #$00
-    sta    <dmf.player.samples.bank+1
+    lda    song.time_base, Y
+    sta    dmf.song.time.base
+    lda    song.time_tick_0, Y
+    sta    dmf.song.time.tick
+    lda    song.time_tick_1, Y
+    sta    dmf.song.time.tick+1
+    lda    song.pattern_rows, Y
+    sta    dmf.song.pattern.rows
+    lda    song.matrix_rows, Y
+    sta    dmf.song.matrix.rows
+    lda    song.instrument_count, Y
+    sta    dmf.song.instrument_count
+    lda    song.mat.lo, Y
+    sta    dmf.song.matrix
+    lda    song.mat.hi, Y
+    sta    dmf.song.matrix+1
+    lda    song.wv.lo, Y
+    sta    dmf.song.wav
+    lda    song.wv.hi, Y
+    sta    dmf.song.wav+1
+    lda    song.it.lo, Y
+    sta    dmf.song.instruments
+    lda    song.it.hi, Y
+    sta    dmf.song.instruments+1
+    lda    song.sp.lo, Y
+    sta    <dmf.player.samples.offset
+    lda    song.sp.hi, Y
+    sta    <dmf.player.samples.offset+1
 
     ; initializes player
     stz    dmf.player.matrix.row
@@ -576,9 +538,9 @@ dmf_load_song:
 
     ; preload wav buffers
     stx    psg_ch
-    lda    dmf.song.wav
+    lda    #low(song.wv00)
     sta    <dmf.player.si
-    lda    dmf.song.wav+1
+    lda    #high(song.wv00)
     sta    <dmf.player.si+1
     jsr    dmf_wav_upload
 
@@ -670,11 +632,18 @@ dmf_update_matrix:
 dmf_update:
     tma    #DMF_HEADER_MPR
     pha
+
+    tma    #DMF_MATRIX_MPR
+    pha
+
     tma    #DMF_DATA_MPR
     pha
     
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
+
+    inc    A
+    tam    #DMF_MATRIX_MPR
 
     jsr    update_song
     
@@ -693,6 +662,10 @@ dmf_update:
 
     pla
     tam    #DMF_DATA_MPR
+
+    pla
+    tam    #DMF_MATRIX_MPR
+
     pla
     tam    #DMF_HEADER_MPR
     
@@ -1984,16 +1957,18 @@ dmf.set_samples.ex:
         adc    dmf.pcm.bank, X
         tay
 
-        lda    [dmf.player.samples.bank], Y
+        lda    [dmf.player.samples.offset], Y
+        tay
+        lda    song.sp.data.bank, Y
         sta    dmf.pcm.src.bank, X
 
         txa
         asl    A
         tax
 
-        lda    [dmf.player.samples.offset.lo], Y
+        lda    song.sp.data.lo, Y
         sta    dmf.pcm.src.ptr, X
-        lda    [dmf.player.samples.offset.hi], Y
+        lda    song.sp.data.hi, Y
         sta    dmf.pcm.src.ptr+1, X
 
         ply

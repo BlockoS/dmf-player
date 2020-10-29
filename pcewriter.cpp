@@ -16,7 +16,6 @@ struct Context {
     uint32_t    bank;
 };
 
-
 static bool open(const std::string &in, Context &ctx) {
     ctx.filename = in;
     ctx.stream = fopen(in.c_str(), "wb");
@@ -42,6 +41,12 @@ static void write_ptr_tbl(Context &ctx, const char* prefix, const char* suffix, 
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "dwl", "dwh" };
     
+    // Compute element char count and adjust elements per line.
+    size_t element_char_len = strlen(prefix) + strlen(suffix) + 8;
+    if((element_char_len*elements_per_line) >= MAX_CHAR_PER_LINE) {
+        elements_per_line = MAX_CHAR_PER_LINE / element_char_len;
+    }
+
     if(bank) {
         fprintf(ctx.stream, "%s.%s.bank:\n", prefix, suffix);
         for(size_t i=0; i<count;) {
@@ -71,6 +76,12 @@ static void write_ptr_tbl(Context &ctx, const char* name, size_t start, size_t c
     static char const* postfix[] = { "lo", "hi" };
     static char const* op[] = { "dwl", "dwh" };
     
+    // Compute element char count and adjust elements per line.
+    size_t element_char_len = strlen(name) + 8;
+    if((element_char_len*elements_per_line) >= MAX_CHAR_PER_LINE) {
+        elements_per_line = MAX_CHAR_PER_LINE / element_char_len;
+    }
+
     if(bank) {
         fprintf(ctx.stream, "%s.bank:\n", name);
         for(size_t i=0; i<count;) {
@@ -169,7 +180,7 @@ static void write_matrices(Context &ctx, Packer::Song const& in, const char *pre
         }
 
         snprintf(name, 256, "mat%02x", static_cast<uint8_t>(i));
-        write_ptr_tbl(ctx, prefix, name, "pat", pattern_index, ELEMENTS_PER_LINE, false);
+        write_ptr_tbl(ctx, prefix, name, "pat", pattern_index, ELEMENTS_PER_LINE, true);
 
         index += matrix[i].packed.size();
     }
@@ -231,7 +242,7 @@ static void write_samples(Context &ctx, const char* prefix, std::vector<Sample> 
     for(size_t j=0; j<samples.size(); j++) {
         size_t start = 0;
         size_t end = samples[j].data.size();
-        fprintf(ctx.stream, "%s.sample_%04x:\n", prefix, static_cast<uint32_t>(j));      
+        fprintf(ctx.stream, "%s%02x:\n", prefix, static_cast<uint32_t>(j));      
         while(start < end) {
             size_t count = ((start+16) > end) ? (end-start) : 16;
             size_t next = ctx.output_bytes + count;
@@ -266,7 +277,8 @@ do { \
 } while(0)
 
     fprintf(ctx.stream, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_HEADER_MPR << 13)\n", ctx.bank);
-    fprintf(ctx.stream, "song.count: .db %ld\n", in.song.size());
+    fprintf(ctx.stream, "songs:\n");
+    fprintf(ctx.stream, "song.count = %ld\n", in.song.size());
 
     print(song.time_base, infos.timeBase);
     print(song.time_tick_0, infos.tickTime[0]);
@@ -274,10 +286,11 @@ do { \
     print(song.pattern_rows, infos.totalRowsPerPattern);
     print(song.matrix_rows, infos.totalRowsInPatternMatrix);
     print(song.instrument_count, instruments.count);
+    write_ptr_tbl(ctx, "song" ,"it", 0, in.song.size(), ELEMENTS_PER_LINE, false);
     print(song.sample_count, sample.size());
-    write_ptr_tbl(ctx, "song" ,"sp", 0, in.song.size(), ELEMENTS_PER_LINE/4, true);
-    write_ptr_tbl(ctx, "song" ,"mat", 0, in.song.size(), ELEMENTS_PER_LINE/2, false);
-    write_ptr_tbl(ctx, "song.wv", 0, in.wave.size(), ELEMENTS_PER_LINE/2, false);
+    write_ptr_tbl(ctx, "song" ,"sp", 0, in.song.size(), ELEMENTS_PER_LINE, false);
+    write_ptr_tbl(ctx, "song.sp.data", 0, in.sample.size(), ELEMENTS_PER_LINE, true);
+    write_ptr_tbl(ctx, "song.wv", 0, in.wave.size(), ELEMENTS_PER_LINE, false);
     for(size_t i=0; i<in.wave.size(); i++) {
         fprintf(ctx.stream, "song.wv%02x:\n", static_cast<uint8_t>(i));
         write_bytes(ctx, in.wave[i].data(), in.wave[i].size(), ELEMENTS_PER_LINE);
@@ -294,12 +307,19 @@ do { \
         write_instruments(ctx, prefix, in.song[i].instruments);
     }
 
+    ctx.bank++;
+
+    fprintf(ctx.stream, "    .data\n    .bank DMF_DATA_ROM_BANK+%d\n    .org (DMF_MATRIX_MPR << 13)\n", ctx.bank);
+    write_ptr_tbl(ctx, "song" ,"mat", 0, in.song.size(), ELEMENTS_PER_LINE, false);
     for(size_t i=0; i<in.song.size(); i++) {
         char name[256];
         snprintf(name, 256, "song%02x", static_cast<uint8_t>(i));
         fprintf(ctx.stream, "%s.mat:\n", name);
         write_matrices(ctx, in.song[i], name);
     }
+
+    ctx.bank++;
+
 #undef print
 
     return true;
@@ -307,6 +327,10 @@ do { \
 
 bool write(std::string const& filename, Packer const& in) {
     Context ctx;
+
+    ctx.output_bytes = 8192;
+    ctx.bank = 0;
+
     if(!open(filename, ctx)) {
         return false;
     }
@@ -315,14 +339,13 @@ bool write(std::string const& filename, Packer const& in) {
     }
 
     ctx.output_bytes = 8192;
-    ctx.bank = 1;
     for(size_t i=0; i<in.song.size(); i++) {
         char name[256];
         snprintf(name, 256, "song%02x", static_cast<uint8_t>(i));
         write_pattern(ctx, in.song[i], name);
     }
 
-    write_samples(ctx, "song.sp", in.sample);
+    write_samples(ctx, "song.sp.data", in.sample);
 
     close(ctx);
     return true;
