@@ -1,36 +1,50 @@
-// Copyright (c) 2015-2019, Vincent "MooZ" Cruz and other contributors.
+// Copyright (c) 2015-2020, Vincent "MooZ" Cruz and other contributors.
 // All rights reserved.
 // Copyrights licensed under the New BSD License. See the accompanying
 // LICENSE file for terms.
+#include <cstdlib>
+
 #include "dmf.h"
 #include "datareader.h"
 #include "pce.h"
 #include "pcewriter.h"
 
 int main(int argc, char** argv) {
-    DMF::Song song;
-    DMF::DataReader reader;
-    PCE::SongPacker packer;
-    bool ok;
+    // [todo] command line argument : bank
+    
+    if(argc < 3) {
+        fprintf(stderr, "Usage: %s out.asm file0.dmf file1.dmf ... \n", argv[0]);
+        return EXIT_FAILURE;
+    }
 
-    if(argc != 3) {
-        fprintf(stderr, "Usage: %s file.dmf out.asm\n", argv[0]);
-        return 1;
+    PCE::Packer packer;
+
+    for(int i=2; i<argc; i++) {
+        printf("processing: %s\n", argv[i]);
+
+        DMF::DataReader reader;
+        DMF::Song song;
+        bool ok;
+
+        ok = reader.load(argv[i], song);
+        if(!ok) {
+            fprintf(stderr, "An error occured while reading %s\n", argv[i]);
+            return EXIT_FAILURE;
+        }
+
+        add(packer, song);
     }
-    
-    ok = reader.load(argv[1], song);
-    if(!ok) {
-        fprintf(stderr, "An error occured while reading %s\n", argv[1]);
-        return 1;
+
+    size_t s = 0;
+    for(size_t i=0; i<packer.wave.size(); i++) {
+        s += packer.wave[i].size();
     }
-    
-    packer.pack(song);
-    
-    PCE::Writer writer(argv[2]);
-    
-    writer.open();
-        packer.output(writer);
-    writer.close();
-    
-    return 0;
+    for(size_t i=0; i<packer.sample.size(); i++) {
+        s += packer.sample[i].data.size();
+    }
+
+    if(!write(argv[1], packer)) {
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }

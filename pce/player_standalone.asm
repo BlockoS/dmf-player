@@ -74,6 +74,13 @@ _vdc_status .ds 1
 _vdc_ctrl   .ds 1
 _vsync_cnt  .ds 1
 
+joyport = $1000
+
+    .bss
+joyold .ds 1
+joypad .ds 1
+joytrg .ds 1
+
 ;;---------------------------------------------------------------------
 
 ;----------------------------------------------------------------------
@@ -99,6 +106,51 @@ _vsync_cnt  .ds 1
     .include "task_manager.asm"
     .include "player.asm"
     .include "frequency.inc"
+
+;----------------------------------------------------------------------
+;
+;----------------------------------------------------------------------
+  .macro joypad_delay
+    pha
+    pla
+    nop
+    nop
+  .endmacro
+
+joypad_read:
+    lda    #$01         ; reset multitap to joypad #1
+    sta    joyport
+    lda    #$03
+    sta    joyport
+    joypad_delay
+
+    lda    #$01         ; read directions (SEL=1)
+    sta    joyport
+    joypad_delay
+
+    lda    joypad
+    sta    joyold
+    lda    joyport
+    asl    A
+    asl    A
+    asl    A
+    asl    A
+    sta    joypad
+
+    stz    joyport      ; read buttons (SEL=0)
+    joypad_delay
+
+    lda    joyport
+    and    #$0f
+    ora    joypad
+    eor    #$ff
+    sta    joypad
+
+    eor    joyold
+    and    joypad
+    sta    joytrg
+
+    rts
 
 ;----------------------------------------------------------------------
 ; IRQ 2
@@ -250,15 +302,6 @@ irq_reset:
 
     jsr    dmf_init
 
-    lda    #bank(song)              ; Change this if the song label changes (and it will most likely).
-    sta    dmf.song.bank
-    lda    #low(song)
-    sta    dmf.song.ptr
-    lda    #high(song)
-    sta    dmf.song.ptr+1
-    jsr    dmf_load_song
-
-
     lda    #low(dmf_commit)
     sta    <_si
     lda    #high(dmf_commit)
@@ -276,6 +319,9 @@ irq_reset:
     lda    #$01
     sta    timer_ctrl
 
+    ldy    #$00
+    jsr    dmf_load_song
+
     cli
     
 .loop:
@@ -283,7 +329,45 @@ irq_reset:
 @wait_vsync:
     lda    <_vsync_cnt
     beq    @wait_vsync
+    
+    jsr   joypad_read
+    lda   joytrg
+    bit   #$01
+    beq   .loop
+
+    sei
+
+    clx
+;@psg_reset:
+;    stx    psg_ch
+;    stz    psg_mainvol
+;    stz    psg_freq.lo
+;    stz    psg_freq.hi
+;    stz    psg_ctrl
+;    stz    psg_pan
+;    stz    psg_noise
+;    inx
+;    cpx    #PSG_CHAN_COUNT
+;    bne    @psg_reset
+
+    ldy   dmf.song.id
+    iny
+    
+    stz   <dmf.zp.begin
+    tii   dmf.zp.begin, dmf.zp.begin+1, dmf.zp.end-(dmf.zp.begin+1)
+    stz   dmf.bss.begin
+    tii   dmf.bss.begin, dmf.bss.begin+1, dmf.bss.end-(dmf.bss.begin+1)
+
+    cpy   #song.count
+    bne   @no_reset
+        cly
+@no_reset:
+    jsr   dmf_load_song
+
+    cli
+
     bra    .loop
+
 
 DMF_DATA_ROM_BANK = 1
 ; [todo::begin] dummy song
