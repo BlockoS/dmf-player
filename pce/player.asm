@@ -561,10 +561,14 @@ dmf_load_song:
     sta    dmf.fx.arp.tick, X
 
     ; preload wav buffers
+    ldy    dmf.song.id
+
     stx    psg_ch
-    lda    #low(song.wv00)
+    lda    song.wv.first, Y
+    tay
+    lda    song.wv.lo, Y
     sta    <dmf.player.si
-    lda    #high(song.wv00)
+    lda    song.wv.hi, Y
     sta    <dmf.player.si+1
     jsr    dmf_wav_upload
 

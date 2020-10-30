@@ -295,6 +295,17 @@ do { \
         fprintf(ctx.stream, "song.wv%02x:\n", static_cast<uint8_t>(i));
         write_bytes(ctx, in.wave[i].data(), in.wave[i].size(), ELEMENTS_PER_LINE);
     }
+    
+    std::vector<uint8_t> wave_first;
+    for(size_t i=0; i<in.song.size(); i++) {
+        uint8_t wave_id = 0;
+        if(!in.song[i].wave.empty()) {
+            wave_id = in.song[i].wave[0];
+        }
+        wave_first.push_back(wave_id);
+    }
+    fprintf(ctx.stream, "song.wv.first:\n");
+    write_bytes(ctx, wave_first.data(), wave_first.size(), ELEMENTS_PER_LINE);
 
     for(size_t i=0; i<in.song.size(); i++) {
         fprintf(ctx.stream, "song%02x.sp:\n", static_cast<uint8_t>(i));
