@@ -337,27 +337,10 @@ irq_reset:
 
     sei
 
-    clx
-;@psg_reset:
-;    stx    psg_ch
-;    stz    psg_mainvol
-;    stz    psg_freq.lo
-;    stz    psg_freq.hi
-;    stz    psg_ctrl
-;    stz    psg_pan
-;    stz    psg_noise
-;    inx
-;    cpx    #PSG_CHAN_COUNT
-;    bne    @psg_reset
+    stz    timer_cnt
 
     ldy   dmf.song.id
     iny
-    
-    stz   <dmf.zp.begin
-    tii   dmf.zp.begin, dmf.zp.begin+1, dmf.zp.end-(dmf.zp.begin+1)
-    stz   dmf.bss.begin
-    tii   dmf.bss.begin, dmf.bss.begin+1, dmf.bss.end-(dmf.bss.begin+1)
-
     cpy   #song.count
     bne   @no_reset
         cly

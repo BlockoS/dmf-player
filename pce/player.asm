@@ -420,6 +420,30 @@ dmf_wav_upload:
 ;; Return:
 ;;
 dmf_load_song:
+    ; reset PSG
+    clx
+@psg_reset:
+    stx    psg_ch
+    lda    #$ff
+    sta    psg_mainvol
+    sta    psg_pan
+    stz    psg_freq.lo
+    stz    psg_freq.hi
+    lda    #%01_0_00000
+    sta    psg_ctrl
+    lda    #%10_0_00000
+    sta    psg_ctrl
+    stz    psg_noise
+    inx
+    cpx    #PSG_CHAN_COUNT
+    bne    @psg_reset
+
+    ; clear player mem
+    stz   <dmf.zp.begin
+    tii   dmf.zp.begin, dmf.zp.begin+1, dmf.zp.end-(dmf.zp.begin+1)
+    stz   dmf.bss.begin
+    tii   dmf.bss.begin, dmf.bss.begin+1, dmf.bss.end-(dmf.bss.begin+1)
+
     tma    #DMF_HEADER_MPR
     pha
 

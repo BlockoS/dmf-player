@@ -10,8 +10,6 @@
 #include "pcewriter.h"
 
 int main(int argc, char** argv) {
-    // [todo] command line argument : bank
-    
     if(argc < 3) {
         fprintf(stderr, "Usage: %s out.asm file0.dmf file1.dmf ... \n", argv[0]);
         return EXIT_FAILURE;
