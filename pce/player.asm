@@ -267,32 +267,32 @@ dmf_commit:
     sei
 
     clx
-    stx    psg_ch                                 ; update PSG control register
+    stx    psg_chn                                 ; update PSG control register
     lda    <dmf.player.psg.ctrl+0
     sta    psg_ctrl
 
     ldx    #$01
-    stx    psg_ch
+    stx    psg_chn
     lda    <dmf.player.psg.ctrl+1
     sta    psg_ctrl
 
     ldx    #$02
-    stx    psg_ch
+    stx    psg_chn
     lda    <dmf.player.psg.ctrl+2
     sta    psg_ctrl
 
     ldx    #$03
-    stx    psg_ch
+    stx    psg_chn
     lda    <dmf.player.psg.ctrl+3
     sta    psg_ctrl
 
     ldx    #$04
-    stx    psg_ch
+    stx    psg_chn
     lda    <dmf.player.psg.ctrl+4
     sta    psg_ctrl
 
     ldx    #$05
-    stx    psg_ch
+    stx    psg_chn
     lda    <dmf.player.psg.ctrl+5
     sta    psg_ctrl
     
@@ -335,9 +335,9 @@ dmf_commit:
             stz    psg_noise
 .endif
         lda    <dmf.player.psg.freq.lo+\1
-        sta    psg_freq.lo
+        sta    psg_freq_lo
         lda    <dmf.player.psg.freq.hi+\1
-        sta    psg_freq.hi
+        sta    psg_freq_hi
 @freq.end\1:
         rmb4   <dmf.player.chn.flag+\1
 @next\1:
@@ -347,27 +347,27 @@ dmf_commit:
 
     clx
     stx    <dmf.player.chn
-    stx    psg_ch
+    stx    psg_chn
     dmf.update_psg 0
     ldx    #$01
     stx    <dmf.player.chn
-    stx    psg_ch
+    stx    psg_chn
     dmf.update_psg 1
     ldx    #$02
     stx    <dmf.player.chn
-    stx    psg_ch
+    stx    psg_chn
     dmf.update_psg 2
     ldx    #$03
     stx    <dmf.player.chn
-    stx    psg_ch
+    stx    psg_chn
     dmf.update_psg 3
     ldx    #$04
     stx    <dmf.player.chn
-    stx    psg_ch
+    stx    psg_chn
     dmf.update_psg 4
     ldx    #$05
     stx    <dmf.player.chn
-    stx    psg_ch
+    stx    psg_chn
     dmf.update_psg 5
 
     lda    #1
@@ -423,12 +423,12 @@ dmf_load_song:
     ; reset PSG
     clx
 @psg_reset:
-    stx    psg_ch
+    stx    psg_chn
     lda    #$ff
     sta    psg_mainvol
     sta    psg_pan
-    stz    psg_freq.lo
-    stz    psg_freq.hi
+    stz    psg_freq_lo
+    stz    psg_freq_hi
     lda    #%01_0_00000
     sta    psg_ctrl
     lda    #%10_0_00000
@@ -437,12 +437,6 @@ dmf_load_song:
     inx
     cpx    #PSG_CHAN_COUNT
     bne    @psg_reset
-
-    ; clear player mem
-    stz   <dmf.zp.begin
-    tii   dmf.zp.begin, dmf.zp.begin+1, dmf.zp.end-(dmf.zp.begin+1)
-    stz   dmf.bss.begin
-    tii   dmf.bss.begin, dmf.bss.begin+1, dmf.bss.end-(dmf.bss.begin+1)
 
     tma    #DMF_HEADER_MPR
     pha
@@ -563,7 +557,7 @@ dmf_load_song:
     ; preload wav buffers
     ldy    dmf.song.id
 
-    stx    psg_ch
+    stx    psg_chn
     lda    song.wv.first, Y
     tay
     lda    song.wv.lo, Y
@@ -2028,7 +2022,7 @@ dmf.pcm.disable:
             bra    @pcm.ch\1.end
 @pcm.ch\1.update:
         ldx    #\1
-        stx    psg_ch
+        stx    psg_chn
 
         sta    psg_wavebuf
 
@@ -2065,7 +2059,7 @@ dmf_pcm_update:
     tam    #DMF_DATA_MPR
 
     lda    <dmf.player.chn
-    sta    psg_ch
+    sta    psg_chn
 
     rts
 ;;------------------------------------------------------------------------------------------

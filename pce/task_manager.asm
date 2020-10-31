@@ -16,7 +16,7 @@ task.add:
         tax
         lda    <_si
         sta    task, X
-        lda     <_si+1
+        lda    <_si+1
         sta    task+1, X
         inc    <task.count
     rts

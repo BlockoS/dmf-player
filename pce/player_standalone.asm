@@ -42,10 +42,10 @@ irq_status   .equ  irqport+3
 ;;---------------------------------------------------------------------
 ; PSG informations
 psgport      .equ  $0800
-psg_ch       .equ  psgport
+psg_chn      .equ  psgport
 psg_mainvol  .equ  psgport+1
-psg_freq.lo  .equ  psgport+2
-psg_freq.hi  .equ  psgport+3
+psg_freq_lo  .equ  psgport+2
+psg_freq_hi  .equ  psgport+3
 psg_ctrl     .equ  psgport+4
 psg_pan      .equ  psgport+5
 psg_wavebuf  .equ  psgport+6
@@ -291,7 +291,7 @@ irq_reset:
 
     clx
 .l1:
-    stx    psg_ch
+    stx    psg_chn
     lda    #$ff
     sta    psg_mainvol
     sta    psg_pan
@@ -301,6 +301,12 @@ irq_reset:
     bne    .l1
 
     jsr    dmf_init
+
+    lda    #low(user_update)
+    sta    <_si
+    lda    #high(user_update)
+    sta    <_si+1
+    jsr    task.add
 
     lda    #low(dmf_commit)
     sta    <_si
@@ -330,14 +336,15 @@ irq_reset:
     lda    <_vsync_cnt
     beq    @wait_vsync
     
+    bra    .loop
+
+user_update:
     jsr   joypad_read
     lda   joytrg
     bit   #$01
-    beq   .loop
+    beq   @end
 
     sei
-
-    stz    timer_cnt
 
     ldy   dmf.song.id
     iny
@@ -345,12 +352,18 @@ irq_reset:
     bne   @no_reset
         cly
 @no_reset:
-    jsr   dmf_load_song
 
+    stz   <dmf.zp.begin
+    tii   dmf.zp.begin, dmf.zp.begin+1, dmf.zp.end-(dmf.zp.begin+1)
+    stz   dmf.bss.begin
+    tii   dmf.bss.begin, dmf.bss.begin+1, dmf.bss.end-(dmf.bss.begin+1)
+
+    stz    irq_status
     cli
 
-    bra    .loop
-
+    jmp   dmf_load_song
+@end:
+    rts
 
 DMF_DATA_ROM_BANK = 1
 ; [todo::begin] dummy song
