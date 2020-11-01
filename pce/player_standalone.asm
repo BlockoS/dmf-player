@@ -308,12 +308,6 @@ irq_reset:
     sta    <_si+1
     jsr    task.add
 
-    lda    #low(dmf_commit)
-    sta    <_si
-    lda    #high(dmf_commit)
-    sta    <_si+1
-    jsr    task.add
-
     lda    #low(dmf_update)
     sta    <_si
     lda    #high(dmf_update)
@@ -366,6 +360,9 @@ user_update:
     rts
 
 DMF_DATA_ROM_BANK = 1
+DMF_HEADER_MPR = 3
+DMF_MATRIX_MPR=4
+DMF_DATA_MPR = 5
 ; [todo::begin] dummy song
     .include "song.asm"
 ; [todo::end] dummy song

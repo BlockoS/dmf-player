@@ -18,11 +18,6 @@
 ;; Title: DMF player.
 ;;
 
-; The song data will be mapped on banks 3, 4 and 5
-DMF_HEADER_MPR = 3
-DMF_MATRIX_MPR=4
-DMF_DATA_MPR = 5
-
 DMF_HEADER_SIZE = 12
 
 DMF_CHAN_COUNT = 6
@@ -252,15 +247,19 @@ mul8:
     rts
 
 ;;
-dmf_commit:
+dmf_update:
     tma    #DMF_HEADER_MPR
     pha
+
     tma    #DMF_MATRIX_MPR
     pha
 
+    tma    #DMF_DATA_MPR
+    pha
+    
     lda    dmf.song.bank
     tam    #DMF_HEADER_MPR
-    
+
     inc    A
     tam    #DMF_MATRIX_MPR
 
@@ -315,7 +314,7 @@ dmf_commit:
 @wav\1:
     bbr6   <dmf.player.chn.flag+\1, @pan\1
         lda    dmf.player.wav.id+\1
-        jsr    @load_wav
+        jsr    dmf_wav_upload.ex
         lda    <dmf.player.psg.ctrl+\1
         sta    psg_ctrl
         rmb6   <dmf.player.chn.flag+\1
@@ -374,15 +373,33 @@ dmf_commit:
     sta    timer_ctrl
     stz    irq_status
 
+    jsr    update_song
+    
+    clx
+    jsr    update_state
+    ldx    #$01
+    jsr    update_state
+    ldx    #$02
+    jsr    update_state
+    ldx    #$03
+    jsr    update_state
+    ldx    #$04
+    jsr    update_state
+    ldx    #$05
+    jsr    update_state
+
+    pla
+    tam    #DMF_DATA_MPR
+
     pla
     tam    #DMF_MATRIX_MPR
 
     pla
     tam    #DMF_HEADER_MPR
-
+    
     rts
 
-@load_wav:
+dmf_wav_upload.ex:
     tay
     lda    song.wv.lo, Y
     sta    <dmf.player.si
@@ -645,52 +662,6 @@ dmf_update_matrix:
 
     inc    <dmf.player.matrix.row
 
-    rts
-
-;;
-;; Function: dmf_update
-;; Song update.
-;;
-dmf_update:
-    tma    #DMF_HEADER_MPR
-    pha
-
-    tma    #DMF_MATRIX_MPR
-    pha
-
-    tma    #DMF_DATA_MPR
-    pha
-    
-    lda    dmf.song.bank
-    tam    #DMF_HEADER_MPR
-
-    inc    A
-    tam    #DMF_MATRIX_MPR
-
-    jsr    update_song
-    
-    clx
-    jsr    update_state
-    ldx    #$01
-    jsr    update_state
-    ldx    #$02
-    jsr    update_state
-    ldx    #$03
-    jsr    update_state
-    ldx    #$04
-    jsr    update_state
-    ldx    #$05
-    jsr    update_state
-
-    pla
-    tam    #DMF_DATA_MPR
-
-    pla
-    tam    #DMF_MATRIX_MPR
-
-    pla
-    tam    #DMF_HEADER_MPR
-    
     rts
 
 update_state:                                 ; [todo] find a better name
@@ -1456,7 +1427,9 @@ dmf.note_off:
     stz    dmf.instrument.flag, X
     stz    dmf.player.freq.delta.lo, X
     stz    dmf.player.freq.delta.hi, X
-    stz    dmf.player.chn.flag, X
+    lda    dmf.player.chn.flag, X
+    and    #NOI_UPDATE
+    sta    dmf.player.chn.flag, X
     
     lda    dmf.bit, X
     trb    <dmf.player.note_on
