@@ -4,13 +4,10 @@
 ;;------------------------------------------------------------------------------------------
 
 ; [todo]
-; speed flip/flop seems broken
-; note cute doesn't work on pcm !
 ; porta to note borken?
 ; pattern_break
 ; position_jump
 ; fine_tune
-; note delay is most likely to be buggy... rework it.
 
 ;;------------------------------------------------------------------------------------------
 
@@ -94,6 +91,9 @@ dmf.player.dh .ds 1
 dmf.player.r0 .ds 2
 dmf.player.r1 .ds 2
 
+dmf.player.status .ds 1
+dmf.player.samples.offset .ds 2 ; PCM samples index
+
 dmf.player.ptr .ds 2
 
 dmf.player.psg.main    .ds 1
@@ -118,8 +118,6 @@ dmf.player.tick .ds 2               ; current time tick (fine/coarse kinda sort 
 dmf.player.pattern.pos  .ds 1       ; current pattern position
 
 dmf.player.detune .ds 1             ; global detune
-
-dmf.player.samples.offset .ds 2 ; PCM samples index
 
 dmf.player.pcm.bank      .ds PSG_CHAN_COUNT
 dmf.player.pcm.ptr       .ds PSG_CHAN_COUNT*2
@@ -204,6 +202,12 @@ dmf.bss.end:
 
 ;;------------------------------------------------------------------------------------------
     .code
+
+    ; Align to 256
+    .org (* + $ff) & $ff00
+    .include "mul.inc"
+    .include "sin.inc"
+
 ;;
 ;; Function: dmf_init
 ;;   Initializes player internals.
@@ -248,6 +252,9 @@ mul8:
 
 ;;
 dmf_update:
+    bbr7   <dmf.player.status, @go
+        rts
+@go:
     tma    #DMF_HEADER_MPR
     pha
 
@@ -425,6 +432,47 @@ dmf_wav_upload:
     cpy    #$20
     bne    @l0
 
+    lda    #$02
+    sta    psg_ctrl
+
+    rts
+
+;;
+;; Function: dmf_stop_song
+;; Stop song.
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+dmf_stop_song:
+    ; stop timer
+;    lda    #(INT_IRQ2 | INT_TIMER | INT_NMI)
+;    sta    irq_disable
+    stz    timer_ctrl
+    ;  set dmf play disable flag
+    smb7   <dmf.player.status
+    ; set main volume to 0
+    stz    psg_mainvol
+    rts
+
+;;
+;; Function: dmf_resume_song
+;; Resume song.
+;;
+;; Parameters:
+;;
+;; Return:
+;;
+dmf_resume_song:
+    ; restart timer
+    lda    #$01
+    sta    timer_ctrl
+    ; reset disable flag
+    rmb7   <dmf.player.status
+    ; set main volume to max
+    lda    #$ff
+    sta    psg_mainvol
     rts
 
 ;;
@@ -437,23 +485,28 @@ dmf_wav_upload:
 ;; Return:
 ;;
 dmf_load_song:
+    jsr    dmf_stop_song
+
+    lda    #%1000_0010
+    trb    <dmf.player.status
+
     ; reset PSG
     clx
 @psg_reset:
-    stx    psg_chn
-    lda    #$ff
-    sta    psg_mainvol
-    sta    psg_pan
-    stz    psg_freq_lo
-    stz    psg_freq_hi
-    lda    #%01_0_00000
-    sta    psg_ctrl
-    lda    #%10_0_00000
-    sta    psg_ctrl
-    stz    psg_noise
-    inx
-    cpx    #PSG_CHAN_COUNT
-    bne    @psg_reset
+        stx    psg_chn
+        lda    #$ff
+        sta    psg_mainvol
+        sta    psg_pan
+        stz    psg_freq_lo
+        stz    psg_freq_hi
+        lda    #%01_0_00000
+        sta    psg_ctrl
+        lda    #%10_0_00000
+        sta    psg_ctrl
+        stz    psg_noise
+        inx
+        cpx    #PSG_CHAN_COUNT
+        bne    @psg_reset
 
     tma    #DMF_HEADER_MPR
     pha
@@ -504,6 +557,7 @@ dmf_load_song:
 ;; Return:
 ;;
 @load_song:
+
     sty    dmf.song.id
 
     lda    song.time_base, Y
@@ -536,62 +590,81 @@ dmf_load_song:
     sta    <dmf.player.samples.offset+1
 
     ; initializes player
-    stz    dmf.player.matrix.row
-    jsr    dmf_update_matrix
+dmf_reset:
+    stz    <dmf.player.ptr
+    tii    dmf.player.ptr, dmf.player.ptr+1, dmf.zp.end-dmf.player.ptr-1
+    tai    dmf.player.ptr, dmf.player.pattern.bank, dmf.bss.end-dmf.player.pattern.bank ; [todo] cut it if it takes too long
 
     lda    #$ff
     sta    <dmf.player.psg.main
 
-    clx
-@player_init:
-    stz    <dmf.player.psg.ctrl, X
-    stz    <dmf.player.psg.freq.lo, X
-    stz    <dmf.player.psg.freq.hi, X
-
-    lda    #$ff
-    sta    <dmf.player.psg.pan, X
+    sta    <dmf.player.psg.pan
+    sta    <dmf.player.psg.pan+1
+    sta    <dmf.player.psg.pan+2
+    sta    <dmf.player.psg.pan+3
+    sta    <dmf.player.psg.pan+4
+    sta    <dmf.player.psg.pan+5
 
     lda    #$7c
-    sta    dmf.player.volume, X
-    sta    dmf.player.volume.orig, X
+    sta    <dmf.player.volume
+    sta    <dmf.player.volume+1
+    sta    <dmf.player.volume+2
+    sta    <dmf.player.volume+3
+    sta    <dmf.player.volume+4
+    sta    <dmf.player.volume+5
 
-    ; set default player sate
-    stz    dmf.player.note.previous, X
-    stz    dmf.player.note, X
-    stz    dmf.player.delay, X
-    stz    dmf.player.cut, X
-    stz    dmf.player.volume.offset, X
-    stz    dmf.player.volume.delta, X
-
-    stz    dmf.instrument.flag, X
-
-    stz    dmf.fx.flag, X
+    sta    dmf.player.volume.orig
+    sta    dmf.player.volume.orig+1
+    sta    dmf.player.volume.orig+2
+    sta    dmf.player.volume.orig+3
+    sta    dmf.player.volume.orig+4
+    sta    dmf.player.volume.orig+5
 
     lda    #1
-    sta    dmf.fx.arp.speed, X
-    sta    dmf.fx.arp.tick, X
+    sta    dmf.fx.arp.speed
+    sta    dmf.fx.arp.speed+1
+    sta    dmf.fx.arp.speed+2
+    sta    dmf.fx.arp.speed+3
+    sta    dmf.fx.arp.speed+4
+    sta    dmf.fx.arp.speed+5
 
-    ; preload wav buffers
+    sta    dmf.fx.arp.tick
+    sta    dmf.fx.arp.tick+1
+    sta    dmf.fx.arp.tick+2
+    sta    dmf.fx.arp.tick+3
+    sta    dmf.fx.arp.tick+4
+    sta    dmf.fx.arp.tick+5
+
     ldy    dmf.song.id
-
-    stx    psg_chn
     lda    song.wv.first, Y
     tay
     lda    song.wv.lo, Y
     sta    <dmf.player.si
     lda    song.wv.hi, Y
     sta    <dmf.player.si+1
+
+    ; preload wav buffers
+    clx
+    stx    psg_chn
+    jsr    dmf_wav_upload
+    inx
+    stx    psg_chn
+    jsr    dmf_wav_upload
+    inx
+    stx    psg_chn
+    jsr    dmf_wav_upload
+    inx
+    stx    psg_chn
+    jsr    dmf_wav_upload
+    inx
+    stx    psg_chn
+    jsr    dmf_wav_upload
+    inx
+    stx    psg_chn
     jsr    dmf_wav_upload
 
-    stz    dmf.pcm.bank, X
+    stz    dmf.player.matrix.row
 
-    inx
-    cpx    #DMF_CHAN_COUNT
-    bne    @player_init
-
-    rts
-
-;;
 ;; Function: dmf_update_matrix
 ;;
 ;; Parameters:
@@ -601,10 +674,13 @@ dmf_load_song:
 dmf_update_matrix:
     lda    <dmf.player.matrix.row
     cmp    dmf.song.matrix.rows
-    bne    @l0
-        stz    <dmf.player.matrix.row
+    bcc    @l0
+        bbs0    <dmf.player.status, @loop
+            smb1   <dmf.player.status
+            jmp    dmf_stop_song
+@loop:
+            jmp    dmf_reset
 @l0:
-
     lda    dmf.song.matrix
     sta    <dmf.player.si    
     lda    dmf.song.matrix+1
@@ -649,8 +725,6 @@ dmf_update_matrix:
         sta    <dmf.player.si+1
 
         stz    <dmf.player.rest, X
-
-; [todo] reset player state
 
         inx
         cpx    #DMF_CHAN_COUNT
@@ -2060,9 +2134,4 @@ modulo_12:
     .db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
     .db $00,$01,$02,$03
     
-;;------------------------------------------------------------------------------------------
-    ; Align to 256
-    .org (* + $ff) & $ff00
-    .include "mul.inc"
-    .include "sin.inc"
 dmf.player.end:
