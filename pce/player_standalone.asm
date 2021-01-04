@@ -42,10 +42,10 @@ irq_status   .equ  irqport+3
 ;;---------------------------------------------------------------------
 ; PSG informations
 psgport      .equ  $0800
-psg_ch       .equ  psgport
+psg_chn      .equ  psgport
 psg_mainvol  .equ  psgport+1
-psg_freq.lo  .equ  psgport+2
-psg_freq.hi  .equ  psgport+3
+psg_freq_lo  .equ  psgport+2
+psg_freq_hi  .equ  psgport+3
 psg_ctrl     .equ  psgport+4
 psg_pan      .equ  psgport+5
 psg_wavebuf  .equ  psgport+6
@@ -74,6 +74,13 @@ _vdc_status .ds 1
 _vdc_ctrl   .ds 1
 _vsync_cnt  .ds 1
 
+joyport = $1000
+
+    .bss
+joyold .ds 1
+joypad .ds 1
+joytrg .ds 1
+
 ;;---------------------------------------------------------------------
 
 ;----------------------------------------------------------------------
@@ -101,6 +108,51 @@ _vsync_cnt  .ds 1
     .include "frequency.inc"
 
 ;----------------------------------------------------------------------
+;
+;----------------------------------------------------------------------
+  .macro joypad_delay
+    pha
+    pla
+    nop
+    nop
+  .endmacro
+
+joypad_read:
+    lda    #$01         ; reset multitap to joypad #1
+    sta    joyport
+    lda    #$03
+    sta    joyport
+    joypad_delay
+
+    lda    #$01         ; read directions (SEL=1)
+    sta    joyport
+    joypad_delay
+
+    lda    joypad
+    sta    joyold
+    lda    joyport
+    asl    A
+    asl    A
+    asl    A
+    asl    A
+    sta    joypad
+
+    stz    joyport      ; read buttons (SEL=0)
+    joypad_delay
+
+    lda    joyport
+    and    #$0f
+    ora    joypad
+    eor    #$ff
+    sta    joypad
+
+    eor    joyold
+    and    joypad
+    sta    joytrg
+
+    rts
+
+;----------------------------------------------------------------------
 ; IRQ 2
 ;----------------------------------------------------------------------
 irq_2:
@@ -114,39 +166,9 @@ irq_1:
     lda    video_reg             ; get VDC status register
     sta    <_vdc_status
 
-    bbr2   <_vdc_status, @check_vsync
-@hsync:
-        jsr    dmf_pcm_update
-
-        st0    #$06
-        lda    <player.rcr
-        clc
-        adc    #$40
-        sta    video_data_l
-        cla
-        adc    #$00
-        sta    video_data_h
-        
-        bra    @end
-@check_vsync:
     bbr5   <_vdc_status, @end
 @vsync:
-    ; [todo] grab P
     task.irq_install
-    dmf_pcm_start
-
-    stz   <player.pcm.rcr
-    stz   <player.pcm.rcr+1
-    stz   <player.pcm.rcr+2
-    stz   <player.pcm.rcr+3
-    stz   <player.pcm.rcr+4
-    stz   <player.pcm.rcr+5
-    stz   <player.pcm.rcr+6
-    stz   <player.pcm.rcr+7
-    stz   <player.pcm.rcr+8
-    stz   <player.pcm.rcr+9
-    stz   <player.pcm.rcr+10
-    stz   <player.pcm.rcr+11
 
     st0    #$06
     st1    #$40
@@ -161,6 +183,16 @@ irq_1:
 ; CPU Timer.
 ;----------------------------------------------------------------------
 irq_timer:
+    pha
+    phx
+    phy
+
+    jsr    dmf_pcm_update
+    stz    irq_status
+    
+    ply
+    plx
+    pla
     rti
 
 ;----------------------------------------------------------------------
@@ -200,7 +232,7 @@ irq_reset:
     stz    $2000                ; clear all the RAM
     tii    $2000,$2001,$1FFF
 
-    lda    #%11111101
+    lda    #%11111001
     sta    irq_disable
     stz    irq_status
 
@@ -254,9 +286,12 @@ irq_reset:
     sta    video_data_l
     st2    #$00
 
+    lda    #%00000_1_00
+    sta    color_ctrl
+
     clx
 .l1:
-    stx    psg_ch
+    stx    psg_chn
     lda    #$ff
     sta    psg_mainvol
     sta    psg_pan
@@ -267,19 +302,25 @@ irq_reset:
 
     jsr    dmf_init
 
-    lda    #bank(song)              ; Change this if the song label changes (and it will most likely).
-    sta    <_bl
-    lda    #low(song)
+    lda    #low(user_update)
     sta    <_si
-    lda    #high(song)
+    lda    #high(user_update)
     sta    <_si+1
-    jsr    dmf_load_song
+    jsr    task.add
 
     lda    #low(dmf_update)
     sta    <_si
     lda    #high(dmf_update)
     sta    <_si+1
     jsr    task.add
+
+    stz    timer_cnt
+
+    lda    #$01
+    sta    timer_ctrl
+
+    ldy    #$00
+    jsr    dmf_load_song
 
     cli
     
@@ -288,9 +329,40 @@ irq_reset:
 @wait_vsync:
     lda    <_vsync_cnt
     beq    @wait_vsync
+    
     bra    .loop
 
+user_update:
+    jsr   joypad_read
+    lda   joytrg
+    bit   #$01
+    beq   @end
+
+    sei
+
+    ldy   dmf.song.id
+    iny
+    cpy   #song.count
+    bne   @no_reset
+        cly
+@no_reset:
+
+    stz   <dmf.zp.begin
+    tii   dmf.zp.begin, dmf.zp.begin+1, dmf.zp.end-(dmf.zp.begin+1)
+    stz   dmf.bss.begin
+    tii   dmf.bss.begin, dmf.bss.begin+1, dmf.bss.end-(dmf.bss.begin+1)
+
+    stz    irq_status
+    cli
+
+    jmp   dmf_load_song
+@end:
+    rts
+
 DMF_DATA_ROM_BANK = 1
+DMF_HEADER_MPR = 3
+DMF_MATRIX_MPR=4
+DMF_DATA_MPR = 5
 ; [todo::begin] dummy song
     .include "song.asm"
 ; [todo::end] dummy song

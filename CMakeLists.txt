@@ -21,9 +21,10 @@ add_custom_target(
 )
 
 find_package(ZLIB)
+# [todo] find libsamplerate
 
 add_executable(dmfread datareader.cpp dmf.cpp main.cpp pce.cpp pcewriter.cpp)
-target_link_libraries(dmfread ${ZLIB_LIBRARIES})
+target_link_libraries(dmfread ${ZLIB_LIBRARIES} samplerate)
 target_include_directories(dmfread PRIVATE ${ZLIB_INCLUDE_DIRS})
 target_compile_features(dmfread PUBLIC cxx_std_11)
 
